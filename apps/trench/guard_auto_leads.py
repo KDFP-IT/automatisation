@@ -1,0 +1,4 @@
+from pathlib import Path
+p=Path('dist/constructor-core.js');s=p.read_text(encoding='utf-8').replace("const g=geometries.get(w.id);", "const g=geometries.get(w.id);if(![w.x,w.y,g.rotation,g.bodyW,g.bodyL].every(Number.isFinite))continue;")
+s=s.replace("lead.x=w.x+Math.cos(angle)*distance;", "const index=e.waypoints.indexOf(lead);if(side==='from'&&index!==0){e.waypoints.splice(index,1);e.waypoints.unshift(lead)}else if(side==='to'&&index!==e.waypoints.length-1){e.waypoints.splice(index,1);e.waypoints.push(lead)}lead.x=w.x+Math.cos(angle)*distance;");p.write_text(s,encoding='utf-8')
+p=Path('dist/network-app.js');s=p.read_text(encoding='utf-8').replace("if(a==='add-point'&&e){", "if(a==='add-point'&&e){").replace(" recordChange(actionBefore,'Изменение объекта');", " if(['add-point','remove-point'].includes(a))reconcileRectangularPorts(p,actionBefore);recordChange(actionBefore,'Изменение объекта');");p.write_text(s,encoding='utf-8')

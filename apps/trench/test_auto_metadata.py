@@ -1,0 +1,3 @@
+from pathlib import Path
+p=Path('tests_backend.py');s=p.read_text(encoding='utf-8').replace("model['wells'][0].update(kind='endpoint'", "model['wells'][0]['ports'][0]['wall']=2\n  model['edges'][0]['waypoints'].insert(0,{'id':'test-auto-lead','x':1,'y':0,'ground':None,'invert':None,'autoPort':model['edges'][0]['from']['well']})\n  model['wells'][0].update(kind='endpoint'")
+s=s.replace("self.assertEqual(self.client.get('/api/schemes/'+item['id']).json['model']['wells'][0]['height'],3.7)", "self.assertEqual(self.client.get('/api/schemes/'+item['id']).json['model']['wells'][0]['height'],3.7)\n  self.assertEqual(self.client.get('/api/schemes/'+item['id']).json['model']['wells'][0]['ports'][0]['wall'],2)");p.write_text(s,encoding='utf-8')

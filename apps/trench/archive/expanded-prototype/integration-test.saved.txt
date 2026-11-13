@@ -1,0 +1,49 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {calculate,defaults} from '../dist/model.js';
+import {calculateProject,summarizeProjects,newProject,pipeVolume} from '../dist/project-model.js';
+import {seedProjects} from '../dist/seed.js';
+const near=(a,b,e=1e-8)=>assert.ok(Math.abs(a-b)<e,`${a} ≠ ${b}`);
+test('photo example reproduces 42.297 m³ with linear depth change',()=>{
+ const p={...defaults,bottom:1.16,depth:2.45,depthEnd:2.66,depthMode:'variable',length:6.79,bedding:0,objectType:'none'};
+ const r=calculate({...p,sectionRounding:'3'});
+ assert.deepEqual(r.errors,[]);near(r.top,3.61);near(r.topEnd,3.82);near(r.areaStart,5.843);near(r.areaEnd,6.623);near(r.excavation,42.29711675);near(r.backfill,r.excavation);near(calculate(p).excavation,42.2993235);
+});
+test('variable-depth volume equals independent integration, reversible end sections',()=>{
+ const p={...defaults,depth:1.3,depthEnd:3.7,depthMode:'variable',length:19.4,slope:.8};const r=calculate(p);
+ let volume=0;const steps=20000;for(let i=0;i<steps;i++){const h=p.depth+(p.depthEnd-p.depth)*(i+.5)/steps;volume+=(p.bottom*h+p.slope*h*h)*p.length/steps}
+ near(volume,r.excavation,1e-6);near(calculate({...p,depth:p.depthEnd,depthEnd:p.depth}).excavation,r.excavation);
+});
+test('short end controls cover; irrelevant hidden pipe fields do not prevent excavation-only calculation',()=>{
+ assert.ok(calculate({...defaults,depthMode:'variable',depthEnd:.2}).errors.length);
+ assert.deepEqual(calculate({...defaults,objectType:'none',diameter:NaN,count:NaN,gap:NaN}).errors,[]);
+ assert.ok(calculate({...defaults,objectType:'box',boxWidth:2,boxHeight:.4}).errors.length);
+});
+test('all 16 Excel sections match original backfill and conserve the balance',()=>{
+ assert.equal(seedProjects.length,16);
+ for(const p of seedProjects){const r=calculateProject(p);assert.deepEqual(r.errors,[],p.name);near(r.rawBackfill,p.originalBackfill);near(r.pitBackfill,p.originalPitBackfill);near(r.groundBackfill+r.exported,p.totalExcavation);if(!r.soilErrors.length)near(r.groups.reduce((a,b)=>a+b,0),p.totalExcavation)}
+ const sum=summarizeProjects(seedProjects);assert.deepEqual(sum.errors,[]);near(sum.totalExcavation,sum.groundBackfill+sum.exported);
+});
+test('Excel first section: material layers, pipe areas and structures stay separate',()=>{
+ const r=calculateProject(seedProjects[0]);near(r.totalExcavation,639.661);near(r.pits,55.52862);near(r.materials,516.021);near(r.pipe,24.95956);near(r.structures,38.794);near(r.backfill,43.15182);near(r.pitBackfill,16.73462);near(r.exported,579.77456);
+});
+test('rounded Excel areas are preserved; diameter is an explicit independent choice',()=>{
+ const pipe=seedProjects[0].pipes[0];near(pipeVolume(pipe),3.56616);assert.ok(Math.abs(pipeVolume({...pipe,method:'diameter'})-pipeVolume(pipe))>.001);
+});
+test('inline rectangular object is excluded once without inventing a pit',()=>{
+ const geometry=calculate({...defaults,objectType:'box',boxWidth:.4,boxHeight:.5});assert.deepEqual(geometry.errors,[]);
+ const p=newProject();p.groups=[100,0,0,0];p.totalExcavation=geometry.excavation;p.materials[0].volume=geometry.bed;p.structures=[{name:'Лоток',volume:geometry.structure,excavation:0,placement:'trench'}];
+ const r=calculateProject(p);assert.deepEqual(r.errors,[]);near(r.pits,0);near(r.trench,geometry.excavation);near(r.rawBackfill,geometry.backfill);near(r.groundBackfill+r.exported,p.totalExcavation);
+});
+test('invalid groups, excessive fill, missing values and invalid pit volumes block aggregate',()=>{
+ for(const mutate of [p=>p.materials[0].volume=1000,p=>p.totalExcavation=NaN,p=>p.structures=[{name:'Колодец',volume:20,excavation:1}]]){const p=structuredClone(seedProjects[0]);mutate(p);assert.ok(calculateProject(p).errors.length);assert.deepEqual(summarizeProjects([p]).errors,[p.name])}
+ const soil=structuredClone(seedProjects[0]);soil.groups=[0,0,0,0];assert.ok(calculateProject(soil).soilErrors.length);assert.deepEqual(summarizeProjects([soil]).soilErrors,[soil.name]);near(calculateProject(soil).totalExcavation,639.661);
+});
+test('rounding remainder is exposed, original negative value preserved',()=>{
+ const p=seedProjects.find(p=>p.id==='excel-159'),r=calculateProject(p);near(r.rawBackfill,-.00048);assert.equal(r.backfill,0);assert.ok(r.warnings.length);near(r.totalExcavation,r.groundBackfill+r.exported);
+});
+test('source warnings retain the supplied mismatches',()=>{
+ assert.ok(seedProjects.find(p=>p.id==='excel-260').sourceWarnings[0].includes('D276'));
+ assert.ok(seedProjects.find(p=>p.id==='excel-392').sourceWarnings[0].includes('расходятся'));
+ assert.ok(calculateProject(seedProjects.find(p=>p.id==='excel-205')).soilErrors.length);
+});

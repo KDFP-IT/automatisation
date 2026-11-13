@@ -1,0 +1,38 @@
+services:
+  trench-calculator:
+    build:
+      context: .
+    image: trench-calculator:7.3.0
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${PORT:-8086}:8080"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    image: trench-projects-api:2.2.0
+    restart: unless-stopped
+    read_only: true
+    environment:
+      DATABASE_PATH: /data/trench.sqlite3
+    volumes:
+      - trench-data:/data
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+volumes:
+  trench-data:

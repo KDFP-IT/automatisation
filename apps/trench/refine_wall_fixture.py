@@ -1,0 +1,2 @@
+from pathlib import Path
+f=Path('create_wall_fixture.mjs');s=f.read_text(encoding='utf-8').replace("writeFileSync('group-fixture.json'", "p.soils=[{id:'test-soil',name:'Тестовый грунт',group:'II',color:'#c4b595'}];for(const w of p.wells)w.layers=[{soil:'test-soil',bottom:20}];for(const e of p.edges)e.layers=[{soil:'test-soil',start:20,end:20}];writeFileSync('group-fixture.json'");f.write_text(s,encoding='utf-8')

@@ -1,0 +1,8 @@
+from pathlib import Path
+p=Path('dist/network-app.js');s=p.read_text(encoding='utf-8').replace("if(isSoilCoverage({code:'geometry',message:'Грунтовые слои не покрывают дно'} )&&state.inspectorTab==='soils')", "if(state.inspectorTab==='soils')");p.write_text(s,encoding='utf-8')
+p=Path('dist/validation-ui.js');s=p.read_text(encoding='utf-8');pos=s.index('export function issueButton');s=s[:pos]+'''export function limitDimensionsHTML(p,issue){if(issue.code!=='trench-overlap')return '';const ids=[issue.objectId,...(issue.related||[])];return '<div class="limit-dimensions">'+p.edges.filter(e=>ids.includes(e.id)).map(e=>{try{const res=resolveEdge(p,e),i=issue.sectionsByEdge?.[e.id]??0,s=e.sections[i],values=[s.a*res.length,s.b*res.length,...res.points.filter(v=>v.s>s.a*res.length&&v.s<s.b*res.length).map(v=>v.s)].map(station=>crossSection(e,res,s,station).top).filter(Number.isFinite),lo=Math.min(...values),hi=Math.max(...values);return `<small>${esc(e.name)} · зона ${i+1}: поверху ${fmt(lo)}${Math.abs(hi-lo)>.005?'–'+fmt(hi):''} м</small>`}catch{return ''}}).join('')+'</div>'}
+'''+s[pos:]
+s=s.replace('<span>${esc(help)}</span><div class="issue-actions">', '<span>${esc(help)}</span>${limitDimensionsHTML(p,issue)}<div class="issue-actions">');p.write_text(s,encoding='utf-8')
+p=Path('tests/plain-errors.test.js');s=p.read_text(encoding='utf-8').replace("'Траншеи заходят друг на друга'", "'Нужен расчёт общей выемки'");p.write_text(s,encoding='utf-8')
+for f in ['package.json','compose.yaml','package_network.py']:
+ p=Path(f);p.write_text(p.read_text(encoding='utf-8').replace('5.4.0','5.5.0'),encoding='utf-8')

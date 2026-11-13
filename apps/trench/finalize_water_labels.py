@@ -1,0 +1,3 @@
+from pathlib import Path
+f=Path('dist/network-app.js');s=f.read_text(encoding='utf-8').replace('Всего с подушкой и обсыпкой','Всего заполнения').replace('м³<small>с подушкой и обсыпкой</small>','м³<small>${r?.pad!==undefined?\'с подготовкой\':\'с подушкой и обсыпкой\'}</small>');f.write_text(s,encoding='utf-8')
+f=Path('DEPLOY.md');s=f.read_text(encoding='utf-8');s+='''\n\nВерсия 7.0.0: web 7.0.0 + API 2.2.0. Обновляйте оба сервиса. Схема SQLite остаётся 2, формат модели JSON 4; добавлены необязательные настройки материала засыпки и явной рабочей части. Старый UI их не учитывает: для отката после редактирования высот используйте резервную копию до обновления. Архив не содержит БД.\n''';f.write_text(s,encoding='utf-8')

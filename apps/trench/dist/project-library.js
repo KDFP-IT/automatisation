@@ -1,0 +1,120 @@
+import {emptyProject,clone} from './constructor-core.js';
+import {uid,validateProject} from './network-model.js';
+import {esc} from './network-views.js';
+const $=id=>document.getElementById(id);
+const stamp=s=>s?new Date(s).toLocaleString('ru-RU',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'';
+export async function api(path,method='GET',body){
+ const abort=new AbortController(),timer=setTimeout(()=>abort.abort(),20000);
+ try{const response=await fetch('./api'+path,{method,cache:'no-store',signal:abort.signal,...(body===undefined?{}:{headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})});let value;try{value=await response.json()}catch{throw Error('Сервер проектов недоступен.')}
+ if(!response.ok){const error=Error(value.error||'Ошибка сервера');error.status=response.status;throw error}return value;
+ }catch(error){if(error.name==='AbortError')throw Error('Сервер не ответил. Изменения не подтверждены.');throw error}finally{clearTimeout(timer)}
+}
+export class SchemeSaver{
+ constructor({send=api,onState=()=>{},recovery=()=>{}}={}){this.send=send;this.onState=onState;this.recovery=recovery;this.active=null;this.pending=null;this.running=null;this.conflict=false;this.timer=null}
+ bind(item){if(this.running||this.pending)throw Error('Сначала сохраните открытую схему.');this.active=item;this.savedJSON=JSON.stringify(item.model);this.conflict=false;this.onState('saved')}
+ queue(model){if(!this.active)return;if(!this.running&&!this.conflict&&JSON.stringify(model)===this.savedJSON){this.pending=null;clearTimeout(this.timer);this.onState('saved');return}this.pending=clone(model);this.recovery(this.active,model);this.onState(this.conflict?'conflict':'pending');clearTimeout(this.timer);if(!this.conflict)this.timer=setTimeout(()=>{this.flush()},650)}
+ get dirty(){return !!(this.pending||this.running||this.conflict)}
+ async flush(){clearTimeout(this.timer);if(this.running)return this.running;if(this.conflict)return false;
+ this.running=(async()=>{while(this.pending){const model=this.pending;this.pending=null;this.onState('saving');try{const value=await this.send('/schemes/'+this.active.id,'PUT',{model,revision:this.active.revision});this.active={...this.active,...value};this.savedJSON=JSON.stringify(model);if(this.pending&&JSON.stringify(this.pending)===this.savedJSON)this.pending=null;this.onState(this.pending?'pending':'saved',this.active)}catch(error){this.pending=this.pending||model;this.conflict=error.status===409;this.onState(this.conflict?'conflict':'error',error);return false}}return true})();
+ try{return await this.running}finally{this.running=null}
+ }
+ abandon(){clearTimeout(this.timer);this.pending=null;this.conflict=false;this.active=null}
+}
+export class ProjectLibrary{
+ constructor({getModel,activate,beforeLeave,legacyCandidates=[],checkStatus=()=>''}){
+ this.checkStatus=checkStatus;this.getModel=getModel;this.activate=activate;this.beforeLeave=beforeLeave;this.legacy=legacyCandidates;this.projects=[];this.project=null;this.activeProject=null;this.isOpen=true;this.busy=false;this.error='';this.search='';this.online=false;this.view='active';this.rootView='active';this.status='';
+ this.saver=new SchemeSaver({onState:(state,detail)=>this.saveStatus(state,detail),recovery:(item,model)=>{try{localStorage.setItem('kdfp-server-draft-'+item.id,JSON.stringify({revision:item.revision,model,at:Date.now()}))}catch{}}});
+ this.mount();
+ }
+ get active(){return this.saver.active}
+ get dirty(){return this.saver.dirty||!!(this.active&&JSON.stringify(this.getModel())!==this.saver.savedJSON)}
+ mount(){
+ document.body.insertAdjacentHTML('beforeend',`<section id="project-library" class="project-library" aria-label="Проекты и схемы"><div class="library-top"><div><button id="library-back" hidden>← Проекты</button><h1 id="library-title">Проекты</h1><p id="library-subtitle">Общая база на сервере</p></div><div class="library-actions"><button id="library-return" hidden>К открытой схеме</button><button id="library-import-file" hidden>Импорт JSON</button><button id="library-new" class="library-primary">+ Проект</button></div></div><div id="library-views" class="library-views" aria-label="Раздел библиотеки"><button data-view="active">Активные</button><button data-view="archived">Архив</button><button data-view="trash">Корзина</button></div><div id="library-parent-state"></div><p id="library-status" role="status"></p><div class="library-search"><input id="library-search" type="search" placeholder="Найти проект" aria-label="Поиск проектов и схем"><button id="library-refresh">↻ Обновить</button></div><div id="library-error" role="status"></div><div id="library-cards" class="library-cards"></div><div class="library-bottom"><span>SQLite · данные сохраняются на сервере</span><button id="library-migrate">Перенести локальные модели (${this.legacy.length})</button></div><input id="library-file" type="file" accept=".json,application/json" hidden></section><dialog id="library-dialog"><form id="library-name-form"><h2 id="library-dialog-title"></h2><p id="library-dialog-message"></p><label id="library-input-wrap"><span id="library-input-label">Название</span><input id="library-name" maxlength="180" required autocomplete="off"></label><p id="library-dialog-error" role="status"></p><div class="library-dialog-actions"><button type="button" id="library-cancel">Отмена</button><button id="library-submit" class="library-primary">Сохранить</button></div></form></dialog>`);
+ document.querySelector('.constructor-header').insertAdjacentHTML('afterbegin','<button id="open-library" class="library-home">☷ Проекты</button>');
+ $('project-name').before(Object.assign(document.createElement('button'),{id:'workspace-project',className:'workspace-project'}));$('project-name').setAttribute('aria-label','Название схемы');
+ document.querySelector('.network-main').insertAdjacentHTML('afterbegin','<div id="server-save-banner" class="server-save-banner" hidden><span id="server-save-message"></span><button id="server-save-retry">Повторить</button><button id="server-save-copy" hidden>Сохранить моей копией</button><button id="server-save-reload" hidden>Открыть версию сервера</button><button id="server-save-library" hidden title="Черновик останется в этом браузере">К проектам</button></div>');
+ document.querySelector('.constructor-header .brand').onclick=event=>{if(event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;event.preventDefault();this.show()};
+ $('open-library').onclick=()=>this.show();$('workspace-project').onclick=()=>this.show(this.active?.project_id);$('library-back').onclick=()=>this.loadRoot();$('library-refresh').onclick=()=>this.refresh();$('library-return').onclick=()=>this.openScheme(this.active.id);
+ $('library-views').onclick=ev=>{const view=ev.target.closest('[data-view]')?.dataset.view;if(!view||this.busy)return;this.view=view;this.status='';if(!this.project)this.rootView=view;this.refresh()};
+ $('library-parent-state').onclick=ev=>{if(ev.target.closest('[data-restore-parent]'))this.changeState(this.project.deleted_at?'restore':'unarchive','project',this.project)};
+ $('library-search').oninput=ev=>{this.search=ev.target.value;this.render()};$('library-new').onclick=()=>this.project?this.createScheme():this.createProject();
+ $('library-cards').onclick=ev=>{const button=ev.target.closest('[data-library-action]');if(!button||this.busy)return;button.closest('.library-card-menu')?.removeAttribute('open');const {libraryAction:action,id}=button.dataset;const lifecycle=action.match(/^(archive|unarchive|trash|restore|purge)-(project|scheme)$/);if(lifecycle){const item=lifecycle[2]==='project'?this.projects.find(v=>v.id===id):this.project?.schemes.find(v=>v.id===id);if(item)this.changeState(lifecycle[1],lifecycle[2],item);return}if(action==='project')this.loadProject(id);if(action==='scheme')this.openScheme(id);if(action==='rename-project')this.renameProject(id);if(action==='copy-project')this.copyProject(id);if(action==='rename-scheme')this.renameScheme(id);if(action==='copy-scheme')this.copyScheme(id)};
+ $('library-cancel').onclick=()=>{$('library-dialog').close();this.nameHandler=null};$('library-name-form').onsubmit=async ev=>{ev.preventDefault();if(!this.nameHandler)return;const handler=this.nameHandler;this.nameHandler=null;$('library-submit').disabled=true;try{await handler($('library-name').value.trim());$('library-dialog').close()}catch(error){this.nameHandler=handler;$('library-dialog-error').textContent=error.message}finally{$('library-submit').disabled=false}};
+ $('library-migrate').hidden=!this.legacy.length;$('library-migrate').onclick=()=>this.migrate();$('library-import-file').onclick=()=>{$('library-file').value='';$('library-file').click()};$('library-file').onchange=ev=>{const file=ev.target.files[0];if(file)this.importFile(file)};
+ $('server-save-library').onclick=async()=>{if(this.active&&this.dirty){try{const model=validateProject(this.getModel());localStorage.setItem('kdfp-server-draft-'+this.active.id,JSON.stringify({revision:this.active.revision,model,at:Date.now()}))}catch(error){this.saveStatus('error',Error('Не удалось сохранить черновик в браузере. Исправьте поля или скачайте JSON перед выходом.'));return}}this.saver.abandon();this.activeProject=null;this.recoveredDraft=null;this.isOpen=true;document.body.classList.add('library-open');window.history.replaceState(null,'',location.pathname);this.view=this.rootView='active';await this.loadRoot()};
+ $('server-save-retry').onclick=()=>this.saver.flush();$('server-save-copy').onclick=()=>this.copyConflict();$('server-save-reload').onclick=()=>this.reloadServer();$('save-state').onclick=()=>this.saver.flush();
+ window.addEventListener('beforeunload',ev=>{let invalid=false;try{if(this.active)validateProject(this.getModel())}catch{invalid=true}if(this.dirty||invalid){ev.preventDefault();ev.returnValue=''}});
+ }
+ async start(){document.body.classList.add('library-open');try{await api('/health');this.online=true;await this.loadRoot();const sid=new URLSearchParams(location.search).get('scheme');if(sid)await this.openScheme(sid)}catch(error){this.error=error.message;this.render()}}
+ nameDialog(title,value,handler,options={}){this.nameHandler=handler;$('library-dialog-message').textContent=options.message||'';$('library-input-wrap').hidden=options.input===false;$('library-name').required=options.input!==false;$('library-input-label').textContent=options.inputLabel||'Название';$('library-submit').textContent=options.submit||'Сохранить';$('library-submit').classList.toggle('danger',!!options.danger);$('library-dialog-title').textContent=title;$('library-name').value=value;$('library-dialog-error').textContent='';$('library-dialog').showModal();if(options.input===false)$('library-cancel').focus();else{$('library-name').focus();$('library-name').select()}}
+ async guarded(task){if(this.busy)return;this.busy=true;this.error='';this.render();try{return await task()}catch(error){this.error=error.message;return null}finally{this.busy=false;this.render()}}
+ async leave(){if(!this.active)return true;if(!this.beforeLeave())return false;const saved=await this.saver.flush();if(!saved)this.saveStatus(this.saver.conflict?'conflict':'error');return saved}
+ async show(projectId){if(!await this.leave())return;this.isOpen=true;document.body.classList.add('library-open');window.history.replaceState(null,'',location.pathname);await(projectId?this.loadProject(projectId):this.loadRoot())}
+ close(){if(!this.active)return;this.isOpen=false;document.body.classList.remove('library-open');window.history.replaceState(null,'','?scheme='+encodeURIComponent(this.active.id))}
+ async loadRoot(){await this.guarded(async()=>{if(this.project)this.view=this.rootView;this.project=null;this.search='';$('library-search').value='';this.projects=(await api('/projects?view='+this.view)).projects;this.online=true})}
+ async loadProject(id){await this.guarded(async()=>{if(this.project?.id!==id){this.rootView=this.view;this.view='active'}this.project=await api('/projects/'+id+'?view='+this.view);this.search='';$('library-search').value='';this.online=true})}
+ async refresh(){if(this.project)return this.loadProject(this.project.id);return this.loadRoot()}
+ render(){
+ const project=this.project,inactiveParent=!!(project?.archived_at||project?.deleted_at),query=this.search.trim().toLowerCase(),items=(project?project.schemes||[]:this.projects).filter(v=>v.name.toLowerCase().includes(query));
+ $('library-title').textContent=project?.name||'Проекты';$('library-back').hidden=!project;$('library-subtitle').textContent=this.busy?'Загрузка…':project?`Схем: ${project.schemes?.length||0} · База сервера`:`Проектов: ${this.projects.length} · База сервера`;
+ $('library-new').textContent=project?'+ Схема':'+ Проект';$('library-new').disabled=this.busy||!this.online;$('library-return').hidden=!this.active;$('library-import-file').hidden=!project;$('library-search').placeholder=project?'Найти схему':'Найти проект';
+ for(const button of $('library-views').querySelectorAll('[data-view]')){button.classList.toggle('active',button.dataset.view===this.view);button.setAttribute('aria-pressed',String(button.dataset.view===this.view))}
+ $('library-new').hidden=this.view!=='active'||inactiveParent;$('library-import-file').hidden=!project||this.view!=='active'||inactiveParent;$('library-migrate').hidden=!this.legacy.length||this.view!=='active'||!!project;$('library-status').textContent=this.status;
+ $('library-parent-state').innerHTML=inactiveParent?`<div class="parent-state">Проект ${project.deleted_at?'в корзине':'в архиве'}. Для работы со схемами восстановите проект.<button data-restore-parent>Восстановить проект</button></div>`:'';
+ $('library-error').textContent=this.error;$('library-error').hidden=!this.error;
+ $('library-cards').innerHTML=items.map(v=>`<article class="library-card"><button class="library-card-open" ${project&&(inactiveParent||v.archived_at||v.deleted_at)?'disabled title="Сначала восстановите схему и проект"':''} data-library-action="${project?'scheme':'project'}" data-id="${v.id}"><span class="library-card-icon">${project?'⌁':'▱'}</span><h2>${esc(v.name)}</h2><p>${project?`Колодцев: ${v.well_count}${v.endpoint_count?` · Точек: ${v.endpoint_count}`:''} · Участков: ${v.edge_count}`:`Схем: ${v.scheme_count}`}</p><small>Изменено ${esc(stamp(v.updated_at))}</small></button><div class="library-card-actions">${this.cardActions(v,project?'scheme':'project',inactiveParent)}</div></article>`).join('')||`<div class="library-empty"><strong>${query?'Ничего не найдено':this.view==='archived'?'Архив пуст':this.view==='trash'?'Корзина пуста':project?'В проекте пока нет схем':'Добавьте первый проект'}</strong><span>${query?'Измените запрос':this.view==='trash'?'Удалённые объекты можно восстановить':this.view==='archived'?'Здесь хранятся завершённые и отложенные объекты':project?'Одна схема — одна самостоятельная трасса и расчёт':'Внутри проекта можно хранить несколько схем'}</span></div>`;
+ $('library-cards').classList.toggle('busy',this.busy);
+ }
+ cardActions(item,kind,parentInactive){
+  if(parentInactive&&kind==='scheme')return '<span class="inactive-card-note">Сначала восстановите проект</span>';
+  const button=(action,label,danger=false)=>`<button class="${danger?'danger':''}" data-library-action="${action}-${kind}" data-id="${item.id}">${label}</button>`;
+  if(item.deleted_at)return button('restore','Восстановить')+button('purge','Удалить навсегда',true);
+  if(item.archived_at)return button('unarchive','В работу')+button('trash','Удалить',true);
+  return button('rename','Переименовать')+button('copy','Копия')+`<details class="library-card-menu"><summary aria-label="Ещё действия для ${esc(item.name)}">Ещё ▾</summary><div>${button('archive','В архив')}${button('trash','Удалить',true)}</div></details>`;
+ }
+ async changeState(action,kind,item){
+  if(this.busy||!await this.leave())return;
+  const execute=async typed=>{
+   const base=(kind==='project'?'/projects/':'/schemes/')+item.id;
+   if(action==='purge'){
+    if(typed!==item.name)throw Error('Введите точное название объекта.');
+    await api(base,'DELETE',{revision:item.revision,confirm_name:typed});
+   }else await api(base+'/state','POST',{action,revision:item.revision});
+   if(this.active&&(kind==='project'?this.active.project_id===item.id:this.active.id===item.id)){
+    this.saver.abandon();this.activeProject=null;this.recoveredDraft=null;$('server-save-banner').hidden=true;window.history.replaceState(null,'',location.pathname);
+   }
+   this.status=action==='archive'?'Перемещено в архив':action==='trash'?'Перемещено в корзину':action==='purge'?'Удалено окончательно':action==='unarchive'?'Возвращено в работу':item.archived_at?'Восстановлено в архив':'Восстановлено';
+   try{if(this.project)this.project=await api('/projects/'+this.project.id+'?view='+this.view);else this.projects=(await api('/projects?view='+this.view)).projects}catch(error){this.error='Действие выполнено, но список не обновился. Нажмите «Обновить». '+error.message}this.render();
+  };
+  const noun=kind==='project'?'Проект':'Схема';
+  if(action==='unarchive'||action==='restore'){await this.guarded(()=>execute(''));return}
+  const purge=action==='purge',trash=action==='trash';
+  const message=purge?`${noun} «${item.name}»${kind==='project'?' со всеми схемами':''} и история версий будут удалены навсегда. Восстановление возможно только из резервной копии.`:trash?`${noun} «${item.name}»${kind==='project'?' вместе со схемами':''} будет ${kind==='project'?'перемещён':'перемещена'} в корзину. ${kind==='project'?'Его':'Её'} можно восстановить.`:`${noun} «${item.name}» будет ${kind==='project'?'скрыт вместе со схемами':'скрыта'} из активного списка. Данные сохранятся в архиве.`;
+  this.nameDialog(purge?'Удалить навсегда?':trash?'Переместить в корзину?':'Переместить в архив?','',execute,{message,input:purge,inputLabel:'Для подтверждения повторите название',submit:purge?'Удалить навсегда':trash?'В корзину':'В архив',danger:purge||trash});
+ }
+ async createProject(){if(!await this.leave())return;this.view=this.rootView='active';this.isOpen=true;document.body.classList.add('library-open');this.nameDialog('Новый проект','',async title=>{const item=await api('/projects','POST',{name:title});this.project=await api('/projects/'+item.id);this.search='';this.render()})}
+ async createScheme(){const pid=this.project?.id;if(!pid)return;if(!await this.leave())return;this.nameDialog('Новая схема','Схема '+((this.project.schemes?.length||0)+1),async title=>{const model=emptyProject();model.name=title;const item=await api('/projects/'+pid+'/schemes','POST',{name:title,model});await this.activateItem(item)})}
+ async openScheme(id){if(this.busy)return;if(!await this.leave())return;await this.guarded(async()=>{const item=await api('/schemes/'+id);await this.activateItem(item)})}
+ async activateItem(item){
+ const checked=validateProject(clone(item.model));this.recoveredDraft=null;const parent=await api('/projects/'+item.project_id);this.saver.bind(item);this.activeProject=parent;this.activate(checked,item);$('workspace-project').textContent=this.activeProject.name+' /';this.close();this.saveStatus('saved');
+ let draft;try{draft=JSON.parse(localStorage.getItem('kdfp-server-draft-'+item.id)||'null')}catch{}
+ if(draft&&JSON.stringify(draft.model)!==JSON.stringify(item.model)){this.recoveredDraft=draft;$('server-save-banner').hidden=false;$('server-save-message').textContent='В браузере есть несохранённая копия этой схемы.';$('server-save-copy').hidden=false;$('server-save-retry').hidden=true;$('server-save-reload').hidden=false}
+ }
+ async renameProject(id){const item=this.projects.find(p=>p.id===id)||this.project;this.nameDialog('Название проекта',item?.name||'',async title=>{await api('/projects/'+id,'PATCH',{name:title});if(this.active?.project_id===id){this.activeProject.name=title;$('workspace-project').textContent=title+' /'}await this.refresh()})}
+ async copyProject(id){await this.guarded(async()=>{const item=await api('/projects/'+id+'/copy','POST',{});this.view='active';this.project=await api('/projects/'+item.id)})}
+ async renameScheme(id){const item=await this.guarded(()=>api('/schemes/'+id));if(!item)return;this.nameDialog('Название схемы',item.name,async title=>{item.model.name=title;const value=await api('/schemes/'+id,'PUT',{revision:item.revision,model:item.model});if(this.active?.id===id){this.saver.active={...this.active,...value};this.saver.savedJSON=JSON.stringify(item.model);this.activate(clone(item.model),this.active)}await this.refresh()})}
+ async copyScheme(id){await this.guarded(async()=>{await api('/schemes/'+id+'/copy','POST',{});this.project=await api('/projects/'+this.project.id+'?view='+this.view)})}
+ async importFile(file){if(!await this.leave())return;const pid=this.project?.id||this.active?.project_id;await this.guarded(async()=>{if(file.size>8e6)throw Error('Файл больше 8 МБ.');const model=validateProject(JSON.parse(await file.text()));const item=pid?await api('/projects/'+pid+'/schemes','POST',{name:model.name,model}):await api('/import','POST',{model,project_name:model.name,source_key:'file-'+uid()});await this.activateItem(item)})}
+ async migrate(){if(!this.legacy.length)return;await this.guarded(async()=>{for(const candidate of this.legacy){const raw=JSON.stringify(candidate.model);await api('/import','POST',{model:candidate.model,project_name:candidate.name,source_key:'legacy-model',source_json:raw})}this.project=null;this.projects=(await api('/projects')).projects;this.online=true})}
+ schedule(model){if(this.active)this.saver.queue(model);else $('save-state').textContent='Выберите схему'}
+ saveStatus(state,detail){
+ const labels={saved:'Сохранено в БД',saving:'Сохраняется…',pending:'Ожидает сохранения',error:'Не сохранено',conflict:'Конфликт версий'};let label=labels[state]||state;if(state==='saved'&&this.checkStatus())label=this.checkStatus()==='limited'?'Сохранено · ограничение расчёта':'Сохранено · заполните исходные данные';$('save-state').dataset.hasErrors=String(this.checkStatus()==='errors');if(state==='saved'&&this.active){try{validateProject(this.getModel())}catch{label='Есть незаполненные поля'}}$('save-state').textContent=label;$('save-state').dataset.state=state;
+ const problem=state==='error'||state==='conflict';$('server-save-library').hidden=!problem;$('server-save-banner').hidden=!problem;if(problem){$('server-save-message').textContent=state==='conflict'?'Другой инженер изменил эту схему. Ваши изменения остаются в открытой вкладке.':detail?.message||'Нет связи с сервером. Изменения ещё не сохранены в БД.';$('server-save-retry').hidden=state==='conflict';$('server-save-copy').hidden=state!=='conflict';$('server-save-reload').hidden=state!=='conflict'}
+ if(state==='saved'&&detail){try{const draft=JSON.parse(localStorage.getItem('kdfp-server-draft-'+detail.id)||'null');if(draft&&JSON.stringify(draft.model)===JSON.stringify(this.getModel()))localStorage.removeItem('kdfp-server-draft-'+detail.id)}catch{}}
+ }
+ async copyConflict(){try{const model=clone(this.recoveredDraft?.model||this.getModel());model.name+=' — моя копия';const item=await api('/projects/'+this.active.project_id+'/schemes','POST',{name:model.name,model});this.saver.abandon();this.recoveredDraft=null;await this.activateItem(item)}catch(error){this.saveStatus('error',error)}}
+ async reloadServer(){try{const item=await api('/schemes/'+this.active.id);validateProject(item.model);this.saver.abandon();this.recoveredDraft=null;await this.activateItem(item)}catch(error){this.saveStatus('error',error)}}
+}
+export function legacyModels(storage=localStorage){
+ const candidates=[];for(const [keys,label]of [[['kdfp-network-v3-constructor-v4','kdfp-network-v3'],null],[['kdfp-kulko-d13-v1-constructor-v4','kdfp-kulko-d13-v1'],'Кулько']]){for(const key of keys){const raw=storage.getItem(key);if(!raw)continue;try{const model=validateProject(JSON.parse(raw));if(model.wells.length||model.edges.length)candidates.push({name:label||model.name,model});break}catch{}}}return candidates;
+}

@@ -1,0 +1,3 @@
+import {readFileSync} from 'node:fs';import {calculateNetwork,crossSection} from './dist/network-model.js';import {uniqueIssues} from './dist/validation-ui.js';
+const p=JSON.parse(readFileSync('analysis-current.json','utf8')),r=calculateNetwork(p);
+for(const v of uniqueIssues(r.issues)){const ids=[v.objectId,...(v.related||[])];console.log(JSON.stringify({code:v.code,message:v.message,point:v.location,edges:p.edges.filter(e=>ids.includes(e.id)).map(e=>{const res=r.edges[e.id]?.res,i=v.sectionsByEdge?.[e.id],s=e.sections[i??0],c=res&&crossSection(e,res,s,(s.a+s.b)/2*res.length);return {name:e.name,zone:i===undefined?null:i+1,from:s.a*res?.length,to:s.b*res?.length,bottomWidth:s.width,top:c?.top,depth:c?.depth,mode:s.slopeMode,inputTop:s.topWidth}})}))}

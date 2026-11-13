@@ -1,0 +1,3 @@
+from pathlib import Path
+p=Path('dist/network-model.js');s=p.read_text(encoding='utf-8').replace(".filter(message=>!issues.some(v=>v.kind==='edge'&&v.objectId===e.id&&v.message===message))", ".filter(message=>!issues.some(v=>v.kind==='edge'&&v.objectId===e.id&&v.message===message)&&!issues.some(v=>v.code==='rect-port-normal'&&v.kind==='well'&&v.objectId===w.id&&v.message===message))");p.write_text(s,encoding='utf-8')
+p=Path('dist/network-app.js');s=p.read_text(encoding='utf-8').replace("picker.scrollIntoView({block:'center',behavior:'smooth'})", "picker.scrollIntoView({block:'start',behavior:'auto'})");p.write_text(s,encoding='utf-8')

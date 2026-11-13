@@ -1,0 +1,11 @@
+from pathlib import Path
+f=Path('dist/network-views.js');s=f.read_text(encoding='utf-8').replace('const defs=`','let planSerial=0;\nconst defs=`',1)
+s=s.replace('let html=defs;const pitContours=',"let html=defs;const maskId='joint-outside-pits-'+(++planSerial);const pitContours=")
+s=s.replace("html+='<defs><mask id=\"joint-outside-pits\"", "html+='<defs><mask id=\"'+maskId+'\"")
+s=s.replace("'stroke-width=\"1.5\" mask=\"url(#joint-outside-pits)\" pointer-events=\"none\"');const q=P(...region.location);html+=text([q[0],q[1]-12],'Общая часть траншей','class=\"joint-plan-label\" pointer-events=\"none\"')", "'stroke-width=\"1.5\" mask=\"url(#'+maskId+')\" pointer-events=\"none\"')")
+s=s.replace("text([450,490],'Зелёный — пересечение траншей вне котлованов'", "text([450,470],'Зелёный — пересечение контуров траншей вне котлованов'")
+f.write_text(s,encoding='utf-8')
+f=Path('tests/plain-errors.test.js');s=f.read_text(encoding='utf-8').replace("html.includes('Общая выемка учтена')", "html.includes('пересечение контуров траншей вне котлованов')");f.write_text(s,encoding='utf-8')
+for name in ['package.json','compose.yaml','package_network.py','README.md','DEPLOY.md','NETWORK.md']:
+ f=Path(name);f.write_text(f.read_text(encoding='utf-8').replace('6.1.0','6.2.0'),encoding='utf-8')
+f=Path('NETWORK.md');s=f.read_text(encoding='utf-8');s+='''\n\n## 6.2.0 — нормальные подключения при переносе\n\nПеренос узла и группы, в том числе ввод X/Y, сохраняет нормали выбранных стен прямоугольных колодцев для прямых труб. Связанные узлы вне выделения могут сдвигаться; их имена показаны после операции. Координаты выбранного узла сохраняются точно, уровни и форма трубы не меняются, направление стен сохраняется. Длина внешних связанных труб может измениться. Вручную заданные вершины не удаляются: такие трубы требуют отдельной проверки. Если выбранные узлы противоречат ограничениям, остаётся последнее допустимое положение и показывается подсказка. Автоматические изгибы не создаются.\n\nПлан различает голубые контуры котлованов и зелёное пересечение верхних контуров траншей вне котлованов. Зелёный слой маскируется по верхним контурам котлованов и является ориентиром в плане, а не точной проекцией 3D-пересечения на всех глубинах. Численный расчёт объёмов 6.0 не изменён.\n''';f.write_text(s,encoding='utf-8')

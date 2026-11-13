@@ -1,0 +1,2 @@
+from pathlib import Path
+p=Path('DEPLOY.md');s=p.read_text(encoding='utf-8');s+='\n\nВерсия 5.1.0: web 5.1.0 + прежний API 2.0.0; формат JSON 4 и схема SQLite 2 не меняются. Добавлены углы выхода трубы, поворот квадратных колодцев с шагом 90° и оси в 3D. Обновляйте по актуальному архиву 5.1.0.\n';p.write_text(s,encoding='utf-8');Path('../output/kdfp-trench-network-v5.1.0-offline/DEPLOY.md').write_text(s,encoding='utf-8')

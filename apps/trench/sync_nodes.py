@@ -1,0 +1,7 @@
+from pathlib import Path
+p=Path('dist/network-app.js');s=p.read_text(encoding='utf-8').replace('<strong>${fmt(g.workingHeight)} / ${fmt(g.neckHeight)} м</strong>','<strong data-derived="well-parts">${fmt(g.workingHeight)} / ${fmt(g.neckHeight)} м</strong>')
+s=s.replace("if(w){const v=$('inspector').querySelector", "if(w){const parts=$('inspector').querySelector('[data-derived=\"well-parts\"]');if(parts){const g=wellGeometry(w,p);parts.textContent=fmt(g.workingHeight)+' / '+fmt(g.neckHeight)+' м'}const v=$('inspector').querySelector")
+s=s.replace("if(node.type==='checkbox')node.checked=!!value;else node.value=value===null?'':number(value);", "if(node.readOnly&&well()?.heightMode==='total'){if(node.dataset.path.endsWith('.neckHeight'))value=wellGeometry(well(),p).neckHeight;if(node.dataset.path.endsWith('.workingHeight'))value=1.8}if(node.type==='checkbox')node.checked=!!value;else node.value=value===null?'':number(value);")
+s=s.replace("if(command==='floor'&&well())", "if(command==='well-height'&&well())node.value=number(wellGeometry(well(),p).height);if(command==='pipe-length'&&edge()&&!node.dataset.invalidDraft)node.value=number(resolveEdge(p,edge()).actualLength);if(command==='floor'&&well())",1)
+s=s.replace("$('inspector').addEventListener('input',inputChanged);", "$('inspector').addEventListener('input',inputChanged);$('inspector').addEventListener('change',ev=>{if(ev.target.tagName==='SELECT'){inputChanged(ev);clearTimeout(pending);refresh();flushEdit();renderInspector()}});")
+p.write_text(s,encoding='utf-8')

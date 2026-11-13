@@ -1,0 +1,2 @@
+import {readFileSync} from 'node:fs';import {calculateNetwork} from './dist/network-model.js';
+const p=JSON.parse(readFileSync('review-current.json','utf8')),r=calculateNetwork(p);console.log(JSON.stringify({valid:r.valid,errors:r.errors,edges:p.edges.map(e=>({name:e.name,exclusive:r.edges[e.id]?.excavation,shared:r.edges[e.id]?.sharedExcavation,gross:r.edges[e.id]?.grossExcavation})),joints:r.joints.map(j=>({names:j.names,volume:j.excavation})),total:r.valid?r.total.excavation:null},null,2));

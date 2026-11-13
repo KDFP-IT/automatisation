@@ -1,0 +1,15 @@
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 DATABASE_PATH=/data/trench.sqlite3
+WORKDIR /app
+COPY requirements-portal.txt ./
+RUN pip install --no-cache-dir -r requirements-portal.txt \
+    && groupadd --gid 10001 portal \
+    && useradd --uid 10001 --gid portal --no-create-home portal \
+    && install -d -o 10001 -g 10001 /data
+COPY serve-portal.py ./
+COPY api/app.py ./api/
+COPY dist/ ./dist/
+USER 10001:10001
+EXPOSE 8080
+CMD ["python", "serve-portal.py"]

@@ -1,0 +1,14 @@
+*
+!Dockerfile
+!nginx.conf
+!dist/
+!dist/**
+
+!Dockerfile.api
+!Dockerfile.portal
+!serve-portal.py
+!requirements-portal.txt
+!api/
+!api/**
+api/__pycache__/
+api/**/__pycache__/

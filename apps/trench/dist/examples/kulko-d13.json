@@ -1,0 +1,170 @@
+{
+  "version": 3,
+  "id": "kulko-d13-reference",
+  "name": "Кулько · Д13 → Д13′ · по листу 3",
+  "notes": "Источник: «30_09-ТКР10.1 изм.-Профили Лист 3.pdf», папка «Кулько/Не убирать!/ли», изменение 4 от 16.09.2026. С листа: L=28,06 м; труба КОРСИС ПРО DN/OD400 SN16; проектная земля 121,605 → 121,607; отметки низа/лотка 117,756 → 117,196; футляр ПЭ100 SDR17 Ø710×42,1 L=27,06 м; ЩПС 0,15 м; колодцы Ø1000. Допущения: координаты локальные, участок выпрямлен; отметки «низа или лотка» приняты за наружный низ для визуализации; футляр расположен симметрично с отступами по 0,50 м, его границы не привязаны на профиле; стенка трубы 24 мм условная; ширина траншеи 1,31 м, откосы 45°, защитный слой 0,30 м и размеры конструкций колодцев условные. Внутреннее дно колодцев принято на 0,15 м ниже низа трубы, горловина 0,60 м, стенки 0,12 м, днище/перекрытие 0,20 м; заложение котлована 1:1 и щебёночная подготовка 0,30 м взяты из примечаний листа 11, прочие размеры условные. Геология не оцифрована: один неопределённый грунт, группа II условная. Все объёмы предварительные; геологические штриховки исходного листа не заменены вымышленными слоями.",
+  "soils": [
+    {
+      "id": "unconfirmed",
+      "name": "Грунт не определён · группа II условная",
+      "group": "II",
+      "color": "#b9c2c9"
+    }
+  ],
+  "wells": [
+    {
+      "id": "cd81a7eb-972a-4093-ad8e-8b3dc451a516",
+      "name": "Д13",
+      "kind": "well",
+      "x": 0,
+      "y": 0,
+      "ground": 121.605,
+      "shape": "round",
+      "diameter": 1,
+      "width": 1.4,
+      "length": 1.4,
+      "wall": 0.12,
+      "workingHeight": 3.1990000000000123,
+      "neckHeight": 0.6,
+      "neckDiameter": 0.7,
+      "neckWall": 0.08,
+      "neckX": 0,
+      "neckY": 0,
+      "slab": 0.2,
+      "base": 0.2,
+      "baseProjection": 0.05,
+      "pitMargin": 0.4,
+      "pitSlope": 1,
+      "pad": 0.3,
+      "padMargin": 0.1,
+      "ports": [
+        {
+          "id": "8a32da12-6ea6-41ac-ad52-9e4b2a3a725c",
+          "name": "Выход → Д13′",
+          "invert": 117.756,
+          "bearing": null
+        }
+      ],
+      "layers": [
+        {
+          "soil": "unconfirmed",
+          "bottom": 20
+        }
+      ]
+    },
+    {
+      "id": "b36135eb-1e13-43e8-88b4-b3d452befc49",
+      "name": "Д13′",
+      "kind": "well",
+      "x": 28.06,
+      "y": 0,
+      "ground": 121.607,
+      "shape": "round",
+      "diameter": 1,
+      "width": 1.4,
+      "length": 1.4,
+      "wall": 0.12,
+      "workingHeight": 3.76100000000001,
+      "neckHeight": 0.6,
+      "neckDiameter": 0.7,
+      "neckWall": 0.08,
+      "neckX": 0,
+      "neckY": 0,
+      "slab": 0.2,
+      "base": 0.2,
+      "baseProjection": 0.05,
+      "pitMargin": 0.4,
+      "pitSlope": 1,
+      "pad": 0.3,
+      "padMargin": 0.1,
+      "ports": [
+        {
+          "id": "4e084c1c-a19f-4229-a1e3-ec6ac6c400e5",
+          "name": "Вход ← Д13",
+          "invert": 117.196,
+          "bearing": null
+        }
+      ],
+      "layers": [
+        {
+          "soil": "unconfirmed",
+          "bottom": 20
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "25567098-55a1-4afb-929d-089f930cbf2e",
+      "name": "Д13 → Д13′",
+      "from": {
+        "well": "cd81a7eb-972a-4093-ad8e-8b3dc451a516",
+        "port": "8a32da12-6ea6-41ac-ad52-9e4b2a3a725c"
+      },
+      "to": {
+        "well": "b36135eb-1e13-43e8-88b4-b3d452befc49",
+        "port": "4e084c1c-a19f-4229-a1e3-ec6ac6c400e5"
+      },
+      "diameter": 0.4,
+      "pipeWall": 0.024,
+      "waypoints": [],
+      "sections": [
+        {
+          "id": "c77b2d54-7444-489e-a56d-3396ed396578",
+          "a": 0,
+          "b": 0.01781895937277263,
+          "method": "trench",
+          "width": 1.31,
+          "slopeMode": "angles",
+          "left": 45,
+          "right": 45,
+          "topWidth": 3,
+          "bedding": 0.15,
+          "around": true,
+          "protection": 0.3,
+          "casing": 0,
+          "casingWall": 0.04
+        },
+        {
+          "id": "01fae88c-1a97-45c0-825c-04563256a0a5",
+          "a": 0.01781895937277263,
+          "b": 0.9821810406272273,
+          "method": "trench",
+          "width": 1.31,
+          "slopeMode": "angles",
+          "left": 45,
+          "right": 45,
+          "topWidth": 3,
+          "bedding": 0.15,
+          "around": true,
+          "protection": 0.3,
+          "casing": 0.71,
+          "casingWall": 0.0421
+        },
+        {
+          "id": "ae6e9d5b-efee-41ea-9933-6386b5233e6c",
+          "a": 0.9821810406272273,
+          "b": 1,
+          "method": "trench",
+          "width": 1.31,
+          "slopeMode": "angles",
+          "left": 45,
+          "right": 45,
+          "topWidth": 3,
+          "bedding": 0.15,
+          "around": true,
+          "protection": 0.3,
+          "casing": 0,
+          "casingWall": 0.04
+        }
+      ],
+      "layers": [
+        {
+          "soil": "unconfirmed",
+          "start": 20,
+          "end": 20
+        }
+      ]
+    }
+  ]
+}

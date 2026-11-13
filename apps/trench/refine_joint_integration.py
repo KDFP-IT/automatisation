@@ -1,0 +1,17 @@
+from pathlib import Path
+p=Path('dist/network-checks.js');s=p.read_text(encoding='utf-8').replace('function clipPolygon(subject,clip)', 'export function clipPolygon(subject,clip)');p.write_text(s,encoding='utf-8')
+p=Path('dist/joint-excavation.js');s=p.read_text(encoding='utf-8');s="import {clipPolygon} from './network-checks.js';\n"+s
+s=s.replace('crossSamples}={})', 'crossSamples,preview=false}={})')
+s=s.replace("parts.push({e,res,section,lo,hi,length,dx,dy,start,evaluate,box:", "const polygon=[corners[0],corners[1],corners[3],corners[2]],r=a.radius,end={x:start.x+dx*length,y:start.y+dy*length},pipePolygon=[[start.x-dy*r,start.y+dx*r],[start.x+dy*r,start.y-dx*r],[end.x+dy*r,end.y-dx*r],[end.x-dy*r,end.y+dx*r]];parts.push({e,res,section,lo,hi,length,dx,dy,start,evaluate,polygon,pipePolygon,radius:r,box:")
+pos=s.index(' let samples=0;')
+s=s[:pos]+''' const cells=(lo,hi,base,zones=[])=>{const cuts=[lo,hi,...zones.flatMap(v=>[Math.max(lo,v.lo),Math.min(hi,v.hi)])].filter(v=>v>=lo&&v<=hi).sort((a,b)=>a-b),result=[];for(let i=1;i<cuts.length;i++){const a=cuts[i-1],b=cuts[i];if(b-a<EPS)continue;const mid=(a+b)/2,h=zones.filter(v=>mid>=v.lo&&mid<=v.hi).reduce((n,v)=>Math.min(n,v.h),base),n=Math.max(1,Math.ceil((b-a)/h)),step=(b-a)/n;for(let k=0;k<n;k++)result.push({mid:a+(k+.5)*step,step})}return result};
+ const clipRange=(range,offset,coefficient,lo,hi)=>{if(Math.abs(coefficient)<1e-10)return offset>=lo-EPS&&offset<=hi+EPS?range:null;const a=(lo-offset)/coefficient,b=(hi-offset)/coefficient,result=[Math.max(range[0],Math.min(a,b)),Math.min(range[1],Math.max(a,b))];return result[1]>result[0]+EPS?result:null};
+'''+s[pos:]
+a=s.index(' for(const source of parts){');b=s.index('    const cuts=pits.map',a)
+s=s[:a]+''' for(const source of parts){const candidates=parts.filter(v=>v.box[0]<=source.box[1]&&v.box[1]>=source.box[0]&&v.box[2]<=source.box[3]&&v.box[3]>=source.box[2]),h=Math.max(step??jointStep,source.res.length/1600),nx=Math.max(32,Math.min(1024,Math.round(crossSamples??jointCrossSamples))),feature=preview?4:Math.max(12,Math.round(nx/16)),zones=[];
+  for(const v of candidates){const sine=Math.abs(source.dx*v.dy-source.dy*v.dx);if(v===source||sine<1e-8)continue;const clipped=clipPolygon(source.polygon,v.pipePolygon);if(clipped.length<3)continue;const positions=clipped.map(q=>(q[0]-source.start.x)*source.dx+(q[1]-source.start.y)*source.dy);zones.push({lo:Math.max(0,Math.min(...positions)),hi:Math.min(source.length,Math.max(...positions)),h:v.radius/feature/sine})}
+  for(const along of cells(0,source.length,h,zones)){const ds=along.step,c=source.evaluate(source.lo+along.mid),left=-c.width/2-c.left*c.depth,right=c.width/2+c.right*c.depth,xZones=[];
+   for(const v of candidates){const ox=c.x-v.start.x,oy=c.y-v.start.y,normalX=-source.dy,normalY=source.dx,lateral=-ox*v.dy+oy*v.dx,coefficient=-normalX*v.dy+normalY*v.dx;let range=clipRange([left,right],lateral,coefficient,-v.radius,v.radius);if(range)range=clipRange(range,ox*v.dx+oy*v.dy,normalX*v.dx+normalY*v.dy,0,v.length);if(range)xZones.push({lo:range[0],hi:range[1],h:Math.abs(coefficient)>1e-8?v.radius/feature/Math.abs(coefficient):(right-left)/nx})}
+   for(const across of cells(left,right,(right-left)/nx,xZones)){const dx=across.step,lat=across.mid,x=c.x-source.dy*lat,y=c.y+source.dx*lat,columns=candidates.map(v=>column(v,x,y)).filter(Boolean),own=columns.find(v=>v.part===source);if(!own)continue;samples++;
+'''+s[b:]
+p.write_text(s,encoding='utf-8')
