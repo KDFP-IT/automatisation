@@ -4,5 +4,7 @@
 !serve.py
 !assemble.py
 !export-libreoffice.py
-!static/
-!static/**
+!ui/
+!ui/**
+ui/node_modules
+static/ui

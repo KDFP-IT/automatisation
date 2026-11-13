@@ -1,3 +1,10 @@
+FROM node:24-alpine AS ui
+WORKDIR /app/ui
+COPY ui/package.json ui/package-lock.json ./
+RUN npm ci
+COPY ui/ ./
+RUN npm run build
+
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
@@ -14,7 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py serve.py assemble.py export-libreoffice.py ./
-COPY static/ ./static/
+COPY --from=ui /app/static/ui ./static/ui
 
 USER 10001:10001
 EXPOSE 8080
