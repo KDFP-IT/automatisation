@@ -1,0 +1,29 @@
+@font-face {
+  font-family: Montserrat;
+  src: url("./montserrat-400.ttf") format("truetype");
+  font-display: swap;
+}
+
+:root {
+  color: #20252a;
+  background: #f4f5f6;
+  font: 16px/1.5 Montserrat, Arial, sans-serif;
+}
+
+main { max-width: 48rem; margin: clamp(1rem, 5vw, 4rem) auto; padding: 0 1.25rem; }
+h1 { margin: 0 0 .75rem; font-size: clamp(1.8rem, 4vw, 2.6rem); }
+p { margin: 0 0 1rem; }
+form { display: grid; gap: .65rem; padding: clamp(1rem, 4vw, 2rem); background: white; border: 1px solid #d6dce1; border-radius: .75rem; }
+label { font-weight: 700; }
+input { max-width: 100%; font: inherit; }
+#template-info { margin: 0; color: #48545e; overflow-wrap: anywhere; }
+#drop { margin: .65rem 0; padding: 1rem; border: 2px dashed #a6afb8; border-radius: .5rem; }
+#drop.active { border-color: #b43d16; background: #fff4ee; }
+#drop p { margin: .35rem 0 .75rem; color: #48545e; }
+#drop #selection { margin: .75rem 0 0; overflow-wrap: anywhere; }
+button, #downloads a { width: fit-content; padding: .65rem 1rem; border: 1px solid #9d3414; border-radius: .45rem; background: #ad3816; color: white; font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
+button:disabled { cursor: default; opacity: .55; }
+#status { margin-top: 1rem; }
+#status.error { color: #a12617; }
+#downloads:not([hidden]) { display: flex; flex-wrap: wrap; gap: .75rem; }
+#downloads a:last-child { background: white; color: #9d3414; }

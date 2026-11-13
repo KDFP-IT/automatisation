@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+node_modules/
+.electron/
+.env
+*.local.json
+*.sqlite*
+*.db
+*.log
+/output/
+/tmp/
+apps/kac/data/
+apps/bookmarks/webapp/data/
+apps/bookmarks/pdf-web-test-*/

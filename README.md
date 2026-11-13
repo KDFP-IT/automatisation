@@ -1,0 +1,16 @@
+# Автоматизации КДФП
+
+Каждый инструмент хранит исходники и зависимости в своём каталоге. Оболочка портала подключает инструменты через меню и маршруты прокси.
+
+| Каталог | Инструмент | Сборка образа из корня |
+| --- | --- | --- |
+| [apps/kac](apps/kac) | Собрать КАЦ | `docker build -t kdfp-portal-kac:local apps/kac` |
+| [apps/bookmarks](apps/bookmarks) | Закладки PDF | `docker build -t kdfp-portal-bookmarks:local apps/bookmarks` |
+| [apps/signatures](apps/signatures) | Проверка подписантов | `docker build -t kdfp-portal-signatures:local apps/signatures` |
+| [apps/trench](apps/trench) | Калькулятор траншей | `docker build -f apps/trench/Dockerfile.portal -t kdfp-portal-trench:local apps/trench` |
+| [apps/portal](apps/portal) | Рабочее место | `docker build -t kdfp-portal-shell:local apps/portal` |
+| [apps/office-chat](apps/office-chat) | Офисный чат | Сервер Python и клиент Windows |
+
+GitHub Actions собирает и проверяет КАЦ при изменениях в `apps/kac` и при изменении его workflow. Сборка основной ветки или ручной запуск сохраняет образ Linux amd64 с контрольной суммой в Artifacts. Образ можно импортировать командой `docker load -i kac-linux-amd64.tar.gz`.
+
+В [deploy/portal](deploy/portal) лежат Compose, меню и маршруты. Базы, рабочие документы и конфигурации с секретами хранятся вне Git. На действующем сервере сохраняйте имя Compose-проекта и привязки томов при обновлениях, включая `portal-data` калькулятора.

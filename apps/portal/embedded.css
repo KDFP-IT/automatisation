@@ -1,0 +1,14 @@
+@media screen {
+  [data-portal-tool="bookmarks"] body > .sidebar,
+  [data-portal-tool="bookmarks"] #workspace > .topbar,
+  [data-portal-tool="bookmarks"] .intro .eyebrow,
+  [data-portal-tool="signatures"] .app-header,
+  [data-portal-tool="trench"] header > .brand,
+  [data-portal-tool="trench"] header > .header-caption {
+    display: none;
+  }
+
+  [data-portal-tool="bookmarks"] #workspace {
+    margin-left: 0;
+  }
+}

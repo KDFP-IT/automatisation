@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ru">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="КДФП Инжиниринг — внутренний сервис закладок чертежей"><title>КДФП — закладки чертежей</title><link rel="icon" href="./static/assets/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="./static/style.css"><link rel="stylesheet" href="./static/kdfp.css"><script src="./static/app.js" defer></script></head>
+<body>
+<aside class="sidebar">
+  <a class="brand" href="./" aria-label="КДФП, главная"><img src="./static/assets/kdfp-logo.webp" alt="КДФП Инжиниринг" width="186" height="49"></a>
+  <div class="workspace-label">РАБОЧЕЕ ПРОСТРАНСТВО</div>
+  <a class="nav-item active" href="#workspace"><span>▤</span> Закладки PDF <span class="nav-arrow">↗</span></a>
+  <a class="nav-item" href="#how-it-works"><span>ⓘ</span> Как это работает</a>
+  <div class="sidebar-note"><span class="connection-dot"></span> Внутренний сервис<p>Обработка на сервере компании.<br>Без внешних сервисов.</p></div>
+  <div class="sidebar-bottom"><span class="avatar">К</span><div>КДФП Инжиниринг<small>Сервисы для сотрудников</small></div></div>
+</aside>
+<main id="workspace">
+  <header class="topbar"><span>Инструменты <span class="slash">/</span> <strong>Закладки чертежей</strong></span><span class="tag"><span class="connection-dot"></span> Внутренняя сеть</span></header>
+  <div class="content">
+    <section class="intro"><div><div class="eyebrow">КДФП / ЦИФРОВЫЕ ИНСТРУМЕНТЫ</div><h1>Закладки<br><span>чертежей</span></h1><p>От штампа к удобной навигации.<br>Загрузите PDF — соберём листы в «Графической части».</p></div><div class="document-art" aria-hidden="true"><div class="art-sheet back"></div><div class="art-sheet front"><div class="art-top"><span>КДФП / КР</span><span>↗</span></div><div class="drawing-grid"><div class="drawing-plan"><i></i><i></i><i></i><i></i></div><span class="dimension horizontal">6 000</span><span class="dimension vertical">4 200</span></div><div class="art-stamp"><span>30/09-ИЛО.КР</span><strong>79</strong></div></div><div class="art-badge">✓ Закладки готовы</div></div></section>
+    <ol class="steps" aria-label="Этапы обработки"><li class="current" id="step1"><span>01</span> Загрузите PDF</li><li id="step2"><span>02</span> Дождитесь обработки</li><li id="step3"><span>03</span> Скачайте результат</li></ol>
+    <div class="workspace-grid">
+      <section class="work-card" aria-labelledby="upload-heading">
+        <div class="card-heading"><div><span class="eyebrow">ВАШ ДОКУМЕНТ</span><h2 id="upload-heading">Добавьте файл проекта</h2></div><span class="file-type">PDF</span></div>
+        <form id="upload-form">
+          <div class="dropzone" id="dropzone"><div class="upload-icon" aria-hidden="true">↑</div><h3>Перетащите PDF сюда</h3><p>или выберите файл на компьютере</p><button class="choose-button" id="choose-file" type="button">Выбрать PDF <span>＋</span></button><span class="file-limit">Один файл · до 200 МБ · до 2 500 страниц</span><input type="file" id="file-input" accept=".pdf,application/pdf" hidden></div>
+          <div id="selected-file" class="selected-file" hidden><div class="pdf-icon">PDF</div><div class="file-info"><strong id="file-name"></strong><small id="file-size"></small></div><button id="remove-file" class="icon-button" type="button" aria-label="Убрать выбранный файл">×</button></div>
+          <details class="settings" id="settings"><summary>Параметры обработки <span>Необязательно</span></summary><div class="settings-content"><p>По умолчанию обрабатываются все страницы со стандартным штампом.</p><div class="field-grid"><label>Первая страница<input name="start" type="number" value="1" min="1" step="1" required></label><label>Последняя страница<input name="end" type="number" min="1" step="1" placeholder="До конца"></label><label>Масштаб штампа<select name="scale"><option value="1">Обычный, 1:1</option><option value="0.5">Уменьшенный, 0,5</option><option value="2">Увеличенный, 2</option></select></label></div><label class="checkbox"><input name="allow_incomplete" type="checkbox"><span>Пропускать чертежи с неполными штампами</span></label><small>Номера страниц здесь — по порядку в PDF, начиная с 1.</small></div></details>
+          <div id="message" class="message" role="alert" hidden></div>
+          <div id="processing" class="processing" role="status" hidden><span class="spinner"></span><div><strong id="processing-title">Читаем штампы и закладки</strong><p id="processing-text">Большой документ может обрабатываться несколько минут.</p></div></div>
+          <button class="primary-button" id="submit-button" type="submit" disabled><span>Создать закладки</span><span>↗</span></button>
+          <p class="privacy-note"><span>♧</span> Исходный файл не изменяется. Вы получите отдельный PDF.</p>
+        </form>
+      </section>
+      <aside class="info-column"><section class="info-card"><div class="eyebrow">ЧТО ПОЛУЧИТСЯ</div><h2>Каждый лист —<br>на своём месте</h2><div class="bookmark-demo"><div class="tree-parent"><span>⌄</span> Графическая часть</div><div class="tree-child"><span class="bookmark-symbol">▱</span><div><strong>Лист 79 30/09-ИЛО.КР</strong><span>Здание решеток. Армирование стен</span></div></div><div class="tree-child muted"><span class="bookmark-symbol">▱</span><div><strong>Лист 80 30/09-ИЛО.КР</strong><span>Здание решеток. Сечение 4-4</span></div></div></div><p class="example-caption">Пример названий, сформированных из штампа</p><ul class="benefits"><li><span>✓</span> Содержательные разделы сохраняются</li><li><span>✓</span> Автоматические ветки листов заменяются</li><li><span>✓</span> Наши закладки — в «Графической части»</li></ul></section><div class="hint-card"><span class="hint-icon">ⓘ</span><div><strong>Нужен текстовый слой</strong><p>Подходит стандартный штамп 185 × 55 мм. Если PDF — скан, сначала распознайте текст с помощью OCR.</p></div></div></aside>
+    </div>
+    <section class="result-card" id="result" aria-labelledby="result-heading" hidden><div class="result-top"><div><div class="success-label">✓ ОБРАБОТКА ЗАВЕРШЕНА</div><h2 id="result-heading">Документ готов к работе</h2><p id="result-summary"></p></div><a class="download-button" id="download-pdf" href="#">Скачать PDF <span>↓</span></a></div><div id="warnings" class="message warning" hidden></div><div class="result-toolbar"><h3>Закладки в «Графической части» <span id="bookmark-count"></span></h3><a id="download-csv" href="#">Скачать список CSV ↗</a></div><div class="table-scroll"><table><thead><tr><th>ЛИСТ</th><th>НАЗВАНИЕ ЗАКЛАДКИ</th><th>СТР. PDF</th></tr></thead><tbody id="bookmarks-body"></tbody></table></div><p class="expiry-note">Результат доступен в этом браузере в течение часа. Скачайте его перед закрытием страницы.</p></section>
+    <section class="how-section" id="how-it-works"><div class="eyebrow">ПРОСТОЙ ПРОЦЕСС</div><h2>Из штампа — в закладки</h2><div class="how-grid"><article><span>01 /</span><h3>Читаем чертежи</h3><p>Находим номер листа, шифр, название объекта и вид работ в штампе.</p></article><article><span>02 /</span><h3>Наводим порядок</h3><p>Сохраняем разделы документа. Заменяем автоматические ветки листов понятными названиями.</p></article><article><span>03 /</span><h3>Готовим отдельную копию</h3><p>Собираем листы в «Графической части» и проверяем сохранение страниц и переходов.</p></article></div></section>
+    <footer><span>КДФП Инжиниринг <span class="footer-separator">/</span> Сервисы для сотрудников</span><span>Файлы автоматически удаляются через час после обработки</span></footer>
+  </div>
+</main>
+</body></html>

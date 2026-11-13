@@ -1,0 +1,8 @@
+Local surname and given-name wordlists derived from OpenCorpora dictionary data,
+distributed in pymorphy3-dicts-ru 2.4.417150.4580142.
+Source: https://opencorpora.org/ and https://github.com/no-plagiarism/pymorphy3-dicts
+License: Creative Commons Attribution-ShareAlike 3.0
+https://creativecommons.org/licenses/by-sa/3.0/
+Modification: selected nominative personal surnames and given names, replaced ё with е,
+removed duplicates, exported as JSON using build_names.py. This derived data is
+distributed under the same CC BY-SA 3.0 license. Application code is separate.

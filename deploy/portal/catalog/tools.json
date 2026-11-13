@@ -1,0 +1,6 @@
+[
+  {"id": "bookmarks", "title": "Закладки PDF", "url": "/bookmarks/", "embed": true},
+  {"id": "signatures", "title": "Проверка подписантов", "url": "/signatures/", "embed": true},
+  {"id": "trench", "title": "Калькулятор траншей", "url": "/trench/", "embed": true},
+  {"id": "kac", "title": "Собрать КАЦ", "url": "/kac/", "embed": true}
+]

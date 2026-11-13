@@ -1,0 +1,41 @@
+name: Build KAC
+
+on:
+  push:
+    branches: [main]
+    paths: ['apps/kac/**', '.github/workflows/kac.yml']
+  pull_request:
+    paths: ['apps/kac/**', '.github/workflows/kac.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      IMAGE: kdfp-portal-kac:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Build only KAC
+        run: docker build --platform linux/amd64 -t "$IMAGE" apps/kac
+      - name: Check KAC HTTP and document tools
+        run: bash apps/kac/smoke-test.sh "$IMAGE"
+      - name: Export image for manual deployment
+        if: github.event_name != 'pull_request'
+        run: |
+          mkdir image
+          docker save "$IMAGE" | gzip > image/kac-linux-amd64.tar.gz
+          cd image
+          sha256sum kac-linux-amd64.tar.gz > kac-linux-amd64.tar.gz.sha256
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: kac-linux-amd64-${{ github.sha }}
+          path: image/
+          compression-level: 0
+          if-no-files-found: error

@@ -1,0 +1,10 @@
+node_modules/
+.names-deps/
+page*.png
+extracted.txt
+pos-*.txt
+pos-*.json
+stamp-*.png
+stamp-*.json
+inspect-drawing.mjs
+*.tar.gz

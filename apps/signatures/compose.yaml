@@ -1,0 +1,22 @@
+services:
+  signature-checker:
+    platform: linux/amd64
+    image: kdfp/signature-checker:1.0.1
+    build: .
+    ports:
+      - "${SIGNATURE_BIND:-127.0.0.1}:${SIGNATURE_PORT:-8087}:8080"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 128m
+    pids_limit: 64
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

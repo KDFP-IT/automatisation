@@ -1,0 +1,42 @@
+x-service: &service
+  pull_policy: never
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp:size=512m,mode=1777
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+
+services:
+  portal:
+    <<: *service
+    image: ${PORTAL_IMAGE:-kdfp-portal-shell:1.0.0}
+    ports:
+      - "${PORTAL_BIND:-127.0.0.1}:${PORTAL_PORT:-8090}:8090"
+    volumes:
+      - ./catalog:/etc/portal/catalog:ro
+      - ./routes:/etc/portal/routes:ro
+  bookmarks:
+    <<: *service
+    image: ${BOOKMARKS_IMAGE:-kdfp-portal-bookmarks:1.0.0}
+    environment:
+      PDF_WEB_HTTPS: "${PDF_WEB_HTTPS:-0}"
+    volumes:
+      - bookmarks-data:/data
+  signatures:
+    <<: *service
+    image: ${SIGNATURES_IMAGE:-kdfp-portal-signatures:1.0.0}
+  trench:
+    <<: *service
+    image: ${TRENCH_IMAGE:-kdfp-portal-trench:1.0.0}
+    volumes:
+      - portal-data:/data
+  kac:
+    <<: *service
+    image: ${KAC_IMAGE:-kdfp-portal-kac:1.0.0}
+    environment:
+      KAC_WORKER_URL: "${KAC_WORKER_URL:-}"
+
+volumes:
+  portal-data:
+  bookmarks-data:

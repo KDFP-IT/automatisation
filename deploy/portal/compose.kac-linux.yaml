@@ -1,0 +1,11 @@
+services:
+  kac:
+    image: ${KAC_IMAGE:-kdfp-portal-kac:1.2.0}
+    environment:
+      KAC_WORKER_URL: ""
+      PDF_WEB_HTTPS: "${PDF_WEB_HTTPS:-0}"
+    volumes:
+      - kac-data:/data
+
+volumes:
+  kac-data:

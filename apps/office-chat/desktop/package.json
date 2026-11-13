@@ -1,0 +1,7 @@
+{
+  "name": "office-chat-desktop",
+  "productName": "Офисный чат",
+  "version": "0.2.0",
+  "private": true,
+  "main": "main.js"
+}
