@@ -7,8 +7,12 @@ address=$(docker port "$container" 8080/tcp)
 base="http://$address/kac"
 health=$(curl --retry 12 --retry-all-errors --retry-delay 1 -fsS "$base/api/health")
 grep -Eq '"available"[[:space:]]*:[[:space:]]*true' <<< "$health"
-curl -fsS "$base/" >/dev/null
-curl -fsS "$base/assets/montserrat-400.ttf" >/dev/null
+docker exec "$container" python -c '
+from urllib.request import urlopen
+for path in ("/", "/assets/montserrat-400.ttf"):
+    with urlopen("http://127.0.0.1:8080/kac" + path, timeout=5) as response:
+        assert response.read(1)
+'
 docker exec "$container" /usr/bin/python3 -c 'import uno'
 docker exec "$container" python -c 'import lxml.etree, PIL.Image, pypdf, pypdfium2'
 docker exec "$container" libreoffice --version
