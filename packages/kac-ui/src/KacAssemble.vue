@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { useToast } from '@nuxt/ui/composables/useToast'
+// useToast, UApp, UIcon и остальные Nuxt-компоненты резолвит хост через auto-import.
 import { analyse, collectDrop, emptyAnalysis, filesFromInput } from './composables/useOffers'
 import { loadHealth, useKacJob } from './composables/useKacJob'
 
@@ -153,7 +153,6 @@ onMounted(async () => {
 </script>
 
 <template>
-  <UApp>
     <main class="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
       <h1 class="text-3xl font-bold tracking-[-0.035em] text-highlighted sm:text-4xl">Собрать КАЦ</h1>
       <p class="mt-2 max-w-2xl text-muted">
@@ -426,5 +425,4 @@ onMounted(async () => {
         </template>
       </UModal>
     </main>
-  </UApp>
 </template>
