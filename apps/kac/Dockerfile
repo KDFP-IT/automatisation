@@ -4,7 +4,6 @@ COPY apps/kac/ui/package.json apps/kac/ui/package-lock.json ./apps/kac/ui/
 RUN npm ci --prefix apps/kac/ui
 COPY apps/kac/ui/index.html apps/kac/ui/vite.config.mjs ./apps/kac/ui/
 COPY apps/kac/ui/src ./apps/kac/ui/src
-COPY apps/kac/ui/public ./apps/kac/ui/public
 COPY packages/kac-ui ./packages/kac-ui
 RUN npm run build --prefix apps/kac/ui
 
