@@ -20,6 +20,7 @@ BOOKMARKS_IMAGE=kdfp-portal-bookmarks:local
 SIGNATURES_IMAGE=kdfp-portal-signatures:local
 TRENCH_IMAGE=kdfp-portal-trench:local
 KAC_IMAGE=kdfp-portal-kac:local
+AUTH_IMAGE=kdfp-portal-auth:local
 ```
 
 ```sh
@@ -53,3 +54,13 @@ if (window.self !== window.top || new URLSearchParams(window.location.search).ha
 Правила: собственная шапка инструмента скрывается только при `[data-embedded]`; самостоятельный запуск (`docker run`) её сохраняет. Портал не вставляет стили в чужой документ и не требует доступа к `contentDocument`.
 
 Дополнительно: инструмент должен разрешать встраивание заголовком `Content-Security-Policy: frame-ancestors 'self'` и блокировать встраивание себя на чужих сайтах — `'self'`, а не `*`. У портала `frame-ancestors 'none'`.
+
+## Доступ через Active Directory
+
+Сервис `auth` (`apps/auth`): вход по паре local либо bind `login@kdfp.ru` в AD, сессии — подписанные cookie. nginx проверяет каждый инструмент через `auth_request /auth/check?tool=<id>`: без сессии — 401, без права — 403. Меню фильтруется по `/auth/me`.
+
+```sh
+docker build -t kdfp-portal-auth:local -f apps/auth/Dockerfile .
+```
+
+Матрица доступов — `access/access.toml` (DN групп под реальный AD, см. `apps/auth/README.md`). Переменные — в `compose.yaml` (`AUTH_MODE`, `LDAP_URL`, `LDAP_BASE_DN`, `SESSION_SECRET`, …): секреты только из окружения/сейфа, не в git. Проверка AD с VPS: `python3 apps/auth/scripts/verify-ad.py --url ldap://192.168.30.200:389 --base-dn DC=kdfp,DC=ru --login <sAMAccountName> --group-dn '<DN>'.

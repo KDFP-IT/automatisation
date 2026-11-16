@@ -16,10 +16,54 @@ export async function loadTools() {
     tools.push({
       id: tool.id,
       title: tool.title,
-      url: url.href,
       embed: Boolean(tool.embed) && url.origin === location.origin
     })
   }
   if (!tools.length) throw new Error('Список инструментов пуст')
   return tools
+}
+
+async function readJson(response) {
+  try {
+    return await response.json()
+  } catch {
+    return {}
+  }
+}
+
+export async function loadAuth() {
+  const modeResponse = await fetch('/auth/mode', { cache: 'no-store' })
+  const mode = modeResponse.ok ? (await readJson(modeResponse)).mode ?? 'local' : 'local'
+  const meResponse = await fetch('/auth/me', { cache: 'no-store' })
+  if (meResponse.status === 401) return { mode, user: null, tools: [] }
+  if (!meResponse.ok) throw new Error('Не удалось проверить сессию')
+  const me = await readJson(meResponse)
+  return { mode, user: me.user ?? null, tools: me.tools ?? [], admin: Boolean(me.admin) }
+}
+
+export async function login(login, password) {
+  const response = await fetch('/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ login, password })
+  })
+  const body = await readJson(response)
+  if (!response.ok) {
+    throw new Error(
+      body.error === 'bad_credentials'
+        ? 'Неверный логин или пароль'
+        : body.error === 'no_portal_access'
+          ? 'Учётная запись не состоит в группе доступа к порталу'
+          : body.error === 'ad_unreachable'
+            ? 'Контроллер AD недоступен, попробуйте позже'
+            : body.error === 'too_many_attempts'
+              ? 'Слишком много попыток, подождите 5 минут'
+              : 'Вход не удался'
+    )
+  }
+  return { user: body.user ?? null, tools: body.tools ?? [], admin: Boolean(body.admin) }
+}
+
+export async function logout() {
+  await fetch('/auth/logout', { method: 'POST' })
 }

@@ -9,6 +9,7 @@
 | [apps/signatures](apps/signatures) | Проверка подписантов | `docker build -t kdfp-portal-signatures:local apps/signatures` |
 | [apps/trench](apps/trench) | Калькулятор траншей | `docker build -f apps/trench/Dockerfile.portal -t kdfp-portal-trench:local apps/trench` |
 | [apps/portal](apps/portal) | Рабочее место | `docker build -t kdfp-portal-shell:local -f apps/portal/Dockerfile .` |
+| [apps/auth](apps/auth) | Вход через AD/local, матрица доступов | `docker build -t kdfp-portal-auth:local -f apps/auth/Dockerfile .` |
 | [apps/office-chat](apps/office-chat) | Офисный чат | Сервер Python и клиент Windows |
 
 GitHub Actions собирает и проверяет КАЦ при изменениях в `apps/kac` и при изменении его workflow. Сборка основной ветки или ручной запуск сохраняет образ Linux amd64 с контрольной суммой в Artifacts. Образ можно импортировать командой `docker load -i kac-linux-amd64.tar.gz`.
