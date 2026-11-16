@@ -30,6 +30,9 @@ Stateless-сервис (stdlib + `ldap3`): сессии — HMAC-cookie, сер�
 | `LOCAL_LOGIN`, `LOCAL_PASSWORD` | fallback-пара для `local` |
 | `SESSION_TTL_H` / `COOKIE_SECURE` | default 12 / 1 (для голого http dev — 0) |
 
+| `LDAP_TIMEOUT_S` | connect-таймаут, default 5 |
+| `LDAP_CA_FILE` | путь CA PEM внутри контейнера, пусто = системные CA (для самоподписанного AD смонтируйте CA и укажите путь) |
+
 ## Проверка AD (с VPS, где виден контроллер)
 
 ```sh
