@@ -31,6 +31,7 @@ onMounted(async () => {
 </script>
 
 <template>
+  <UApp>
   <div class="grid h-dvh grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[248px_minmax(0,1fr)] md:grid-rows-none">
     <aside class="flex flex-col gap-4 border-b border-default bg-default p-3 md:border-b-0 md:border-r">
       <div class="flex items-center gap-3 px-2 pt-1">
@@ -63,4 +64,5 @@ onMounted(async () => {
       </div>
     </main>
   </div>
+  </UApp>
 </template>

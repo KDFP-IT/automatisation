@@ -3,9 +3,9 @@ name: Build KAC
 on:
   push:
     branches: [main]
-    paths: ['apps/kac/**', '.github/workflows/kac.yml']
+    paths: ['apps/kac/**', 'packages/kac-ui/**', '.github/workflows/kac.yml']
   pull_request:
-    paths: ['apps/kac/**', '.github/workflows/kac.yml']
+    paths: ['apps/kac/**', 'packages/kac-ui/**', '.github/workflows/kac.yml']
   workflow_dispatch:
 
 permissions:
@@ -32,7 +32,7 @@ jobs:
           npm ci
           npm test
       - name: Build only KAC
-        run: docker build --platform linux/amd64 -t "$IMAGE" apps/kac
+        run: docker build --platform linux/amd64 -f apps/kac/Dockerfile -t "$IMAGE" .
       - name: Check KAC HTTP and document tools
         run: bash apps/kac/smoke-test.sh "$IMAGE"
       - name: Export image for manual deployment

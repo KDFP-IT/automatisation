@@ -1,0 +1,14 @@
+.git
+**/.git
+**/node_modules
+**/__pycache__
+*.py[cod]
+apps/kac/static/ui
+apps/kac/data/
+apps/bookmarks/webapp/data/
+apps/portal/dist/
+deploy/portal/.env
+*.sqlite3
+*.db
+build-logs
+.ref-*
