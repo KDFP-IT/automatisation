@@ -40,6 +40,7 @@ services:
     <<: *service
     image: ${AUTH_IMAGE:-kdfp-portal-auth:1.0.0}
     environment:
+      AUTH_OPEN: "${AUTH_OPEN:-0}"
       AUTH_MODE: "${AUTH_MODE:-local}"
       SESSION_SECRET: "${SESSION_SECRET:-}"
       SESSION_TTL_H: "${SESSION_TTL_H:-12}"
