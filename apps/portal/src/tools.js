@@ -38,7 +38,7 @@ export async function loadAuth() {
   if (meResponse.status === 401) return { mode, user: null, tools: [] }
   if (!meResponse.ok) throw new Error('Не удалось проверить сессию')
   const me = await readJson(meResponse)
-  return { mode, user: me.user ?? null, tools: me.tools ?? [], admin: Boolean(me.admin) }
+  return { mode, user: me.user ?? null, displayName: me.display_name ?? me.user ?? null, tools: me.tools ?? [], admin: Boolean(me.admin) }
 }
 
 export async function login(login, password) {
@@ -61,7 +61,7 @@ export async function login(login, password) {
               : 'Вход не удался'
     )
   }
-  return { user: body.user ?? null, tools: body.tools ?? [], admin: Boolean(body.admin) }
+  return { user: body.user ?? null, displayName: body.display_name ?? body.user ?? null, tools: body.tools ?? [], admin: Boolean(body.admin) }
 }
 
 export async function logout() {

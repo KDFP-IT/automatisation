@@ -94,8 +94,8 @@ def sign(payload: bytes) -> str:
     return hmac.new(SESSION_SECRET.encode(), payload, hashlib.sha256).hexdigest()
 
 
-def mint(user: str, tools: list[str], admin: bool) -> str:
-    body = {"u": user, "t": sorted(tools), "a": admin,
+def mint(user: str, tools: list[str], admin: bool, display_name: str = "") -> str:
+    body = {"u": user, "t": sorted(tools), "a": admin, "n": display_name,
             "exp": int(time.time()) + SESSION_TTL}
     raw = base64.urlsafe_b64encode(json.dumps(body).encode()).decode()
     return f"{raw}.{sign(raw.encode())}"
@@ -114,7 +114,7 @@ def verify(token: str) -> dict | None:
         return None
 
 
-def ldap_check_groups(upn: str, password: str) -> tuple[str, set[str]]:
+def ldap_check_groups(upn: str, password: str) -> tuple[str, str, set[str]]:
     from ldap3 import Server, Connection, Tls
     from ldap3.core.exceptions import LDAPException
     from ldap3.core.results import RESULT_INVALID_CREDENTIALS
@@ -167,19 +167,20 @@ def ldap_check_groups(upn: str, password: str) -> tuple[str, set[str]]:
         wanted = sorted({BASE_GROUP, *ADMIN_GROUPS,
                          *(g for spec in TOOLS.values() for g in spec.get("groups", []))})
         conn.search(LDAP_BASE_DN, f"(userPrincipalName={escape_filter_chars(upn)})",
-                    attributes=["distinguishedName"])
+                    attributes=["distinguishedName", "displayName"])
         if not conn.entries:
             raise KeyError("no such user")
         user_dn = str(conn.entries[0].distinguishedName)
+        display_name = str(conn.entries[0].displayName or "")
         if AUTH_OPEN:
-            return user_dn, set()
+            return user_dn, display_name, set()
         matched = set()
         for group_dn in wanted:
             conn.search(group_dn, f"(member:{IN_CHAIN}:={escape_filter_chars(user_dn)})",
                         search_scope="BASE", attributes=["cn"])
             if conn.entries:
                 matched.add(group_dn)
-        return user_dn, matched
+        return user_dn, display_name, matched
     except KeyError:
         raise
     except LDAPException as problem:
@@ -246,7 +247,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(401, {"error": "unauthorized", "mode": AUTH_MODE})
                 return
             self._send(200, {"user": session["u"], "tools": session["t"],
-                             "admin": session["a"]})
+                             "admin": session["a"], "display_name": session.get("n", "")})
         elif target.path == "/auth/check":
             session = self._session()
             if not session:
@@ -255,7 +256,8 @@ class Handler(BaseHTTPRequestHandler):
             tool = parse_qs(target.query).get("tool", [""])[0]
             if not tool or tool in session["t"] or session["a"]:
                 self._send(200, {"ok": True},
-                           {"X-Auth-User": session["u"]})
+                           {"X-Auth-User": session["u"],
+                            "X-Auth-Name": session.get("n", "")})
             else:
                 self._send(403, {"error": "forbidden", "tool": tool})
         else:
@@ -286,10 +288,10 @@ class Handler(BaseHTTPRequestHandler):
                             and hmac.compare_digest(password, LOCAL_PASSWORD)):
                         raise KeyError("bad credentials")
                     tools = sorted(TOOLS)
-                    admin, user = True, login
+                    admin, user, display_name = True, login, login
                 else:
                     upn = login if "@" in login else f"{login}@{LDAP_DOMAIN}"
-                    _, matched = ldap_check_groups(upn, password)
+                    _, display_name, matched = ldap_check_groups(upn, password)
                     if AUTH_OPEN:
                         tools, admin = sorted(TOOLS), False
                     else:
@@ -301,8 +303,9 @@ class Handler(BaseHTTPRequestHandler):
                     user = upn
                 print(f"auth: login {login}: ok admin={admin} tools={len(tools)}",
                       flush=True)
-                self._send(200, {"user": user, "tools": tools, "admin": admin},
-                           cookie=self._set_cookie(mint(user, tools, admin)))
+                self._send(200, {"user": user, "tools": tools, "admin": admin,
+                                 "display_name": display_name},
+                           cookie=self._set_cookie(mint(user, tools, admin, display_name)))
             except KeyError:
                 note_fail(login)
                 print(f"auth: login {login}: bad credentials", flush=True)

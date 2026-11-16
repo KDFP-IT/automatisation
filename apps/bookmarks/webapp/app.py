@@ -113,6 +113,7 @@ def create_app(config=None):
                 jobs[key].update(status=status, result=details, finished=time.time())
                 info = dict(jobs[key])
             audit_event("process", info.get("audit_user"), app.logger,
+                        user_name=info.get("audit_name"),
                         status=status, pages=details.get("pages"), duration_ms=int(
                             (time.time() - info.get("started", time.time())) * 1000),
                         error=details.get("error"),
@@ -183,7 +184,9 @@ def create_app(config=None):
             filename = file.filename.replace("\\", "/").split("/")[-1]
             filename = "".join(char for char in filename if ord(char) >= 32)[:180] or "document.pdf"
             jobs[key] = {"owner": session["owner"], "filename": filename, "status": "uploading",
-                         "audit_user": request.headers.get("X-Auth-User", ""), "started": time.time()}
+                         "audit_user": request.headers.get("X-Auth-User", ""),
+                         "audit_name": request.headers.get("X-Auth-Name", ""),
+                         "started": time.time()}
         folder = job_root / key
         try:
             folder.mkdir()
@@ -224,7 +227,8 @@ def create_app(config=None):
         if not job or job["status"] != "done" or kind not in {"pdf", "csv"}:
             return jsonify(error="Файл недоступен. Загрузите PDF заново."), 404
         audit_event("download", job.get("audit_user") or request.headers.get("X-Auth-User", ""),
-                    app.logger, details={"kind": kind})
+                    app.logger, user_name=job.get("audit_name") or request.headers.get("X-Auth-Name", ""),
+                    details={"kind": kind})
         path = job_root / key / ("result.pdf" if kind == "pdf" else "bookmarks.csv")
         stem = Path(job["filename"]).stem
         name = f"{stem}_с_закладками.pdf" if kind == "pdf" else f"{stem}_закладки.csv"

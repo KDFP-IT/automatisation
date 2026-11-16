@@ -88,7 +88,7 @@ async function signOut() {
       />
       <p v-else-if="session.user && loaded && !nav.length" class="px-2 text-sm text-muted">Нет доступных инструментов — обратитесь к администратору.</p>
       <div v-if="session.user" class="mt-auto flex items-center gap-2 px-2 pb-1">
-        <p class="min-w-0 flex-1 truncate text-xs text-muted">{{ session.user }}</p>
+        <p class="min-w-0 flex-1 truncate text-xs text-muted" :title="session.user">{{ session.displayName || session.user }}</p>
         <UButton size="xs" variant="ghost" color="neutral" :loading="false" @click="signOut">Выйти</UButton>
       </div>
       <p v-else-if="loaded && error" class="px-2 text-sm text-error">{{ error }}</p>
