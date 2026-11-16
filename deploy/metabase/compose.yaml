@@ -1,10 +1,8 @@
 services:
   metabase:
     image: metabase/metabase:v0.65.3
-    restart: unless-stopped
-    stop_grace_period: 60s
-    cap_drop: [ALL]
-    security_opt: [no-new-privileges:true]
+    # No cap_drop/no-new-privileges: the image entrypoint starts as root and
+    # drops to the metabase user itself; stripping caps breaks that (su fails).
     env_file:
       - .env
     ports:
