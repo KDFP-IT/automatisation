@@ -58,8 +58,9 @@ with open(env("ACCESS_FILE", "/etc/auth/access.toml"), "rb") as fh:
 BASE_GROUP = ACCESS.get("base_group", "")
 ADMIN_GROUPS = list(ACCESS.get("admin_groups", []))
 TOOLS = ACCESS.get("tools", {})
-if AUTH_MODE == "ldap" and not BASE_GROUP:
-    fail("base_group is required in access.toml for ldap mode")
+AUTH_OPEN = env("AUTH_OPEN", "0") == "1"
+if AUTH_MODE == "ldap" and not BASE_GROUP and not AUTH_OPEN:
+    fail("base_group is required in access.toml for ldap mode (or set AUTH_OPEN=1)")
 
 LDAP_URL = env("LDAP_URL")
 LDAP_TLS_MODE = env("LDAP_TLS_MODE", "").strip().lower()
@@ -287,11 +288,14 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     upn = login if "@" in login else f"{login}@{LDAP_DOMAIN}"
                     _, matched = ldap_check_groups(upn, password)
-                    if BASE_GROUP not in matched:
-                        self._send(403, {"error": "no_portal_access"})
-                        print(f"auth: login {login}: no base group", flush=True)
-                        return
-                    tools, admin = allowed_tools(matched)
+                    if AUTH_OPEN:
+                        tools, admin = sorted(TOOLS), False
+                    else:
+                        if BASE_GROUP not in matched:
+                            self._send(403, {"error": "no_portal_access"})
+                            print(f"auth: login {login}: no base group", flush=True)
+                            return
+                        tools, admin = allowed_tools(matched)
                     user = upn
                 print(f"auth: login {login}: ok admin={admin} tools={len(tools)}",
                       flush=True)
