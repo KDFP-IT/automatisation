@@ -1,4 +1,5 @@
 """Accept a Word template and a tree of offers from the KAC portal tool."""
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 import csv
 from http.client import HTTPConnection, HTTPSConnection, HTTPException
@@ -9,7 +10,7 @@ import secrets
 import shutil
 import subprocess
 import sys
-from threading import Event, Lock, Thread
+from threading import Event, Lock, Thread, Timer
 import time
 from urllib.parse import urlsplit
 from zipfile import ZipFile
@@ -17,6 +18,7 @@ from zipfile import ZipFile
 from flask import Flask, Response, jsonify, request, send_file, send_from_directory, session
 
 ROOT = Path(__file__).resolve().parent
+UI = ROOT / "static" / "ui"
 SECTION = re.compile(r"Раздел\s+(\d+)\s*[-–—]\s*\S.*", re.IGNORECASE)
 WINDOWS_RESERVED = re.compile(r"(?:CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])(?:\.|$)", re.I)
 DOWNLOADS = {"pdf": ("result.pdf", "КАЦ — готовый комплект.pdf"),
@@ -81,26 +83,56 @@ def create_kac_app():
 
     def run_job(key, sections):
         folder = root / key
-        status = {"status": "processing"}
+        covered = len(sections)
         with lock:
-            jobs[key].update(status)
+            jobs[key].update(status="processing", stage="preparing", progress=0.1,
+                             sections_done=0, sections_total=covered)
         try:
             worker = ROOT / "assemble.py"
             result = folder / "result"
             offers = folder / "offers"
             if len(sections) == 1:
                 offers /= next(iter(sections.values()))
-            completed = subprocess.run(
-                [sys.executable, str(worker), str(folder / "source.docx"), str(offers),
+            process = subprocess.Popen(
+                [sys.executable, "-u", str(worker), str(folder / "source.docx"), str(offers),
                  "-o", str(result), "--yes"],
-                capture_output=True, encoding="utf-8", errors="replace", timeout=900,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                encoding="utf-8", errors="replace",
                 env={**os.environ, "PYTHONIOENCODING": "utf-8"},
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
-            if completed.returncode:
-                app.logger.error("KAC job %s failed: %s", key, completed.stderr)
-                last = completed.stderr.strip().splitlines()
-                detail = last[-1] if last else ""
+            tail = deque(maxlen=40)
+            expired = []
+
+            def stop():
+                expired.append(True)
+                process.kill()
+
+            watchdog = Timer(900, stop)
+            watchdog.start()
+            try:
+                for line in process.stdout:
+                    line = line.rstrip()
+                    if line:
+                        tail.append(line)
+                    if re.match(r"^Раздел\s+\d+\s+—", line):
+                        with lock:
+                            job = jobs[key]
+                            done = job.get("sections_done", 0) + 1
+                            job.update(sections_done=done, stage="rendering",
+                                       progress=round(0.15 + 0.75 * done / max(covered, 1), 3))
+                    elif "Обновление оглавления" in line:
+                        with lock:
+                            jobs[key].update(stage="exporting", progress=0.92)
+            finally:
+                watchdog.cancel()
+                process.stdout.close()
+                code = process.wait()
+            if expired:
+                raise subprocess.TimeoutExpired("assemble.py", 900)
+            if code:
+                app.logger.error("KAC job %s failed: %s", key, "\n".join(tail))
+                detail = tail[-1] if tail else ""
                 if detail.startswith("Ошибка: ") and str(folder) not in detail:
                     raise ValueError(detail.removeprefix("Ошибка: "))
                 raise RuntimeError("KAC export failed")
@@ -111,7 +143,8 @@ def create_kac_app():
                 for section, *_, image_path in rows:
                     path = result / image_path
                     archive.write(path, f"{sections[int(section)]}/{path.name}")
-            status = {"status": "done", "pages": len(rows), "sections": len(sections)}
+            status = {"status": "done", "stage": "done", "progress": 1.0,
+                      "pages": len(rows), "sections": len(sections)}
         except ValueError as error:
             status = {"status": "error", "error": str(error)}
         except subprocess.TimeoutExpired:
@@ -131,7 +164,11 @@ def create_kac_app():
 
     @app.after_request
     def headers(response):
-        response.headers["Cache-Control"] = "no-store"
+        response.headers["Cache-Control"] = (
+            "public, max-age=31536000, immutable"
+            if request.path.startswith("/ui/assets/")
+            else "no-store"
+        )
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; object-src 'none'; frame-ancestors 'self'; base-uri 'none'"
@@ -144,11 +181,11 @@ def create_kac_app():
 
     @app.get("/")
     def index():
-        return send_file(ROOT / "static" / "index.html")
+        return send_file(UI / "index.html")
 
-    @app.get("/assets/<any('app.js','style.css','montserrat-400.ttf'):filename>")
-    def assets(filename):
-        return send_from_directory(ROOT / "static", filename)
+    @app.get("/ui/<path:filename>")
+    def ui_assets(filename):
+        return send_from_directory(UI, filename)
 
     @app.before_request
     def forward_to_worker():
@@ -218,7 +255,7 @@ def create_kac_app():
         with lock:
             if sum("finished" not in job for job in jobs.values()) >= 4:
                 return jsonify(error="Очередь заполнена. Повторите после завершения сборки."), 429
-            jobs[key] = {"owner": owner, "status": "queued"}
+            jobs[key] = {"owner": owner, "status": "queued", "stage": "queued", "progress": 0.05}
         try:
             folder.mkdir()
             source = folder / "source.docx"
@@ -249,7 +286,8 @@ def create_kac_app():
                     return {k: v for k, v in job.items() if k not in {"owner", "finished"}}
                 if job["status"] == "done" and kind in DOWNLOADS:
                     file, name = DOWNLOADS[kind]
-                    return send_file(root / key / file, as_attachment=True, download_name=name)
+                    inline = kind == "pdf" and request.args.get("inline") == "1"
+                    return send_file(root / key / file, as_attachment=not inline, download_name=name)
         return jsonify(error="Задание недоступно. Загрузите файлы заново."), 404
 
     return app

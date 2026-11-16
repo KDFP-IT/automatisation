@@ -8,6 +8,13 @@ from werkzeug.middleware.dispatcher import DispatcherMiddleware
 from api.app import app
 
 
+@app.after_request
+def security_headers(response):
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers["Content-Security-Policy"] = "frame-ancestors 'self'"
+    return response
+
+
 @app.get("/", defaults={"filename": "index.html"})
 @app.get("/<path:filename>")
 def frontend(filename):

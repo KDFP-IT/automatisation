@@ -1,0 +1,4 @@
+[data-embedded] body > .sidebar { display: none; }
+[data-embedded] #workspace > .topbar { display: none; }
+[data-embedded] .intro .eyebrow { display: none; }
+[data-embedded] #workspace { margin-left: 0; }

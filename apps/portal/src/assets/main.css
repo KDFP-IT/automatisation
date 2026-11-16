@@ -1,0 +1,135 @@
+@import "tailwindcss";
+@source "../../../../packages/kac-ui/src";
+@import "@nuxt/ui";
+@import "./tokens.css";
+@import "@fontsource/manrope/latin-400.css";
+@import "@fontsource/manrope/cyrillic-400.css";
+@import "@fontsource/manrope/latin-500.css";
+@import "@fontsource/manrope/cyrillic-500.css";
+@import "@fontsource/manrope/latin-600.css";
+@import "@fontsource/manrope/cyrillic-600.css";
+@import "@fontsource/manrope/latin-700.css";
+@import "@fontsource/manrope/cyrillic-700.css";
+@import "@fontsource/manrope/latin-800.css";
+@import "@fontsource/manrope/cyrillic-800.css";
+@import "@fontsource/manrope/latin-400.css";
+@import "@fontsource/manrope/cyrillic-400.css";
+@import "@fontsource/manrope/latin-500.css";
+@import "@fontsource/manrope/cyrillic-500.css";
+@import "@fontsource/manrope/latin-600.css";
+@import "@fontsource/manrope/cyrillic-600.css";
+@import "@fontsource/manrope/latin-700.css";
+@import "@fontsource/manrope/cyrillic-700.css";
+@import "@fontsource/manrope/latin-800.css";
+@import "@fontsource/manrope/cyrillic-800.css";
+@import "@fontsource/manrope/latin-400.css";
+@import "@fontsource/manrope/cyrillic-400.css";
+@import "@fontsource/manrope/latin-500.css";
+@import "@fontsource/manrope/cyrillic-500.css";
+@import "@fontsource/manrope/latin-600.css";
+@import "@fontsource/manrope/cyrillic-600.css";
+@import "@fontsource/manrope/latin-700.css";
+@import "@fontsource/manrope/cyrillic-700.css";
+@import "@fontsource/manrope/latin-800.css";
+@import "@fontsource/manrope/cyrillic-800.css";
+@import "@fontsource/manrope/latin-400.css";
+@import "@fontsource/manrope/cyrillic-400.css";
+@import "@fontsource/manrope/latin-500.css";
+@import "@fontsource/manrope/cyrillic-500.css";
+@import "@fontsource/manrope/latin-600.css";
+@import "@fontsource/manrope/cyrillic-600.css";
+@import "@fontsource/manrope/latin-700.css";
+@import "@fontsource/manrope/cyrillic-700.css";
+@import "@fontsource/manrope/latin-800.css";
+@import "@fontsource/manrope/cyrillic-800.css";
+@import "@fontsource/manrope/latin-400.css";
+@import "@fontsource/manrope/cyrillic-400.css";
+@import "@fontsource/manrope/latin-500.css";
+@import "@fontsource/manrope/cyrillic-500.css";
+@import "@fontsource/manrope/latin-600.css";
+@import "@fontsource/manrope/cyrillic-600.css";
+@import "@fontsource/manrope/latin-700.css";
+@import "@fontsource/manrope/cyrillic-700.css";
+@import "@fontsource/manrope/latin-800.css";
+@import "@fontsource/manrope/cyrillic-800.css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme static {
+  --font-sans: var(--k-font-sans);
+
+  --color-brand-50: var(--k-brand-50);
+  --color-brand-100: var(--k-brand-100);
+  --color-brand-200: var(--k-brand-200);
+  --color-brand-300: var(--k-brand-300);
+  --color-brand-400: var(--k-brand-400);
+  --color-brand-500: var(--k-brand-500);
+  --color-brand-600: var(--k-brand-600);
+  --color-brand-700: var(--k-brand-700);
+  --color-brand-800: var(--k-brand-800);
+  --color-brand-900: var(--k-brand-900);
+  --color-brand-950: var(--k-brand-950);
+
+  --color-zinc-50: var(--k-neutral-50);
+  --color-zinc-100: var(--k-neutral-100);
+  --color-zinc-200: var(--k-neutral-200);
+  --color-zinc-300: var(--k-neutral-300);
+  --color-zinc-400: var(--k-neutral-400);
+  --color-zinc-500: var(--k-neutral-500);
+  --color-zinc-600: var(--k-neutral-600);
+  --color-zinc-700: var(--k-neutral-700);
+  --color-zinc-800: var(--k-neutral-800);
+  --color-zinc-900: var(--k-neutral-900);
+  --color-zinc-950: var(--k-neutral-950);
+}
+
+/* Nuxt UI задаёт эти переменные runtime-плагином через inline <style>,
+   а CSP портала запрещает inline-стили. Значения — из дизайн-системы smeta-checker. */
+:root, :host {
+  --ui-primary: var(--k-brand-600);
+  --ui-success: var(--color-green-700);
+  --ui-warning: var(--color-amber-800);
+  --ui-error: var(--color-red-700);
+  --ui-info: var(--color-blue-700);
+  --ui-text: var(--k-ink);
+  --ui-text-muted: var(--k-ink-muted);
+  --ui-text-dimmed: var(--k-ink-muted);
+  --ui-text-toned: var(--k-ink-toned);
+  --ui-text-highlighted: var(--k-ink-highlighted);
+  --ui-text-inverted: #ffffff;
+  --ui-bg: var(--k-surface);
+  --ui-bg-muted: var(--k-paper);
+  --ui-bg-elevated: var(--k-surface);
+  --ui-bg-accented: var(--k-surface-accented);
+  --ui-border: var(--k-line);
+  --ui-border-muted: var(--k-line-muted);
+  --ui-border-accented: var(--k-line-accented);
+  --ui-radius: var(--k-radius);
+}
+
+@layer base {
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background: var(--ui-bg-muted);
+    color: var(--ui-text);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3 {
+    color: var(--ui-text-highlighted);
+    text-wrap: balance;
+  }
+
+  button:not(:disabled), summary {
+    cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ui-primary);
+    outline-offset: 3px;
+  }
+}
