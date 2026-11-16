@@ -171,6 +171,8 @@ def ldap_check_groups(upn: str, password: str) -> tuple[str, set[str]]:
         if not conn.entries:
             raise KeyError("no such user")
         user_dn = str(conn.entries[0].distinguishedName)
+        if AUTH_OPEN:
+            return user_dn, set()
         matched = set()
         for group_dn in wanted:
             conn.search(group_dn, f"(member:{IN_CHAIN}:={escape_filter_chars(user_dn)})",
