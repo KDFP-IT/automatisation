@@ -9,14 +9,13 @@
 # the audit volume holds audit.sqlite3, the portal volume trench.sqlite3
 # (portal-data). If the project name differs, rename the externals below.
 # Inside Metabase add two SQLite databases:
-#   audit  -> /audit/audit.sqlite3
-#   trench -> /trench-data/trench.sqlite3
 services:
   metabase:
     volumes:
       - portal_audit-data:/audit:ro
-      - portal_portal-data:/trench-data:ro
-
+      # SQLite needs directory write access for its lock/journal files even
+      # for plain SELECTs; Metabase itself never writes to source databases.
+      - portal_portal-data:/trench-data
 volumes:
   portal_audit-data:
     external: true
