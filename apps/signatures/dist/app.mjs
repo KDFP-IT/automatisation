@@ -2,6 +2,7 @@ import {decodeCms,extractExpected,matchPeople,parseName,checkDigest,correctExpec
 import {pageLines,inkEvidence} from './layout.mjs';
 import {digestHex} from './vendor/hash.mjs';
 const $=id=>document.getElementById(id);
+function beacon(action,fields){try{fetch('/audit/event',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tool:'signatures',action,...fields})}).catch(()=>{});}catch(e){}}
 const state={files:[],expected:[],signers:[],rows:[],filter:'all',pdf:null,pdfBytes:null,pages:[],errors:[],mode:'actual',name:'',busy:false,run:0};
 const labels={found:'Найдена',missing:'Не найдена',review:'Уточнить'};
 function el(tag,text,cls){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e;}
@@ -36,6 +37,7 @@ async function inspectHandwriting(page,lines){
 }
 $('analyze').onclick=async()=>{
   const pdfFile=state.files.find(f=>/\.pdf$/i.test(f.name));if(!pdfFile||state.busy)return;
+  const started=performance.now();
   const pageCount=Number($('page-count').value),pageStart=Number($('page-start').value);
   if($('scope').value==='first'&&(!Number.isInteger(pageCount)||pageCount<1||pageCount>200||!Number.isInteger(pageStart)||pageStart<1)){showError('Укажите начальную страницу и число страниц от 1 до 200.');return;}
   state.busy=true;fileList();$('files').disabled=true;$('scope').disabled=true;$('page-count').disabled=true;$('page-start').disabled=true;$('handwriting-check').disabled=true;$('apply').disabled=true;showError('');
@@ -63,6 +65,7 @@ $('analyze').onclick=async()=>{
     $('preview-pages').replaceChildren();
     $('progress').textContent='';
     syncEditor();recalculate();
+    {const rows=state.rows;beacon('check',{status:'ok',pages:state.pages.length,duration_ms:Math.round(performance.now()-started),details:{surnames:state.expected.length,signatures:state.signers.length,matched:rows.filter(r=>r.status!=='missing'&&r.status!=='review').length,missing:rows.filter(r=>r.status==='missing').length,review:rows.filter(r=>r.status==='review').length,errors:state.errors.length}});}
   }catch(e){if(run===state.run)showError(e.name==='PasswordException'?'PDF защищён паролем. Выберите доступную для чтения копию.':`Не удалось выполнить проверку: ${e.message}`);}
   finally{state.busy=false;$('files').disabled=false;$('scope').disabled=false;$('page-count').disabled=false;$('page-start').disabled=false;$('handwriting-check').disabled=false;$('apply').disabled=false;fileList();}
 };
@@ -120,6 +123,7 @@ function csvCell(value){return '"'+String(value??'').replaceAll('"','""')+'"';}
 $('export').onclick=()=>{
   const rows=[['Документ','Фамилия / ФИО из PDF','Должность','Страницы','Результат','Подписант из SIG','Источник ЭП','Текстовые страницы где засчитан SIG','Рукописные на чертежах','Чертежи без рукописной','Чертежи требующие проверки','Примечание'],...state.rows.map(p=>[state.name,p.display,p.role,(p.pages||[]).join(', '),p.evidenceType==='partial'?'Частично':labels[p.status],p.matches?.map(s=>s.name).join('; '),p.matches?.map(s=>s.file).join('; '),p.sigAppliedPages.join(', '),[...new Set(p.handwriting.present.map(s=>s.page))].join(', '),[...new Set(p.occurrences.filter(o=>o.type==='drawing'&&o.status==='missing').map(s=>s.page))].join(', '),[...new Set(p.occurrences.filter(o=>o.type==='drawing'&&o.status==='review').map(s=>s.page))].join(', '),`${p.reason}. Подлинность ЭП не проверена.`])];
   const blob=new Blob(['\ufeff'+rows.map(r=>r.map(csvCell).join(';')).join('\r\n')],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=el('a');a.href=url;a.download='КДФП_сверка_подписантов.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);
+  beacon('export',{status:'ok',details:{rows:state.rows.length}});
 };
 let previewIndex=null,previewPage=1,previewGeneration=0,previewRender=null,previewFullPage=false;
 function closePreview(){previewGeneration++;previewRender?.cancel();previewRender=null;$('preview').close();}

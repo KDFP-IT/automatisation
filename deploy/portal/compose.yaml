@@ -53,7 +53,13 @@ services:
       LOCAL_PASSWORD: "${LOCAL_PASSWORD:-}"
     volumes:
       - ./access:/etc/auth:ro
+  audit:
+    <<: *service
+    image: ${AUDIT_IMAGE:-kdfp-portal-audit:1.0.0}
+    volumes:
+      - audit-data:/data
 
 volumes:
   portal-data:
   bookmarks-data:
+  audit-data:

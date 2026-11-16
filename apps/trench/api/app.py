@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 from flask import Flask, jsonify, request, abort, has_request_context
 from werkzeug.exceptions import HTTPException

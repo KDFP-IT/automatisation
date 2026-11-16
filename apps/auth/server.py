@@ -248,7 +248,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(401, {"error": "unauthorized"})
                 return
             tool = parse_qs(target.query).get("tool", [""])[0]
-            if tool in session["t"]:
+            if not tool or tool in session["t"] or session["a"]:
                 self._send(200, {"ok": True},
                            {"X-Auth-User": session["u"]})
             else:

@@ -21,6 +21,7 @@ SIGNATURES_IMAGE=kdfp-portal-signatures:local
 TRENCH_IMAGE=kdfp-portal-trench:local
 KAC_IMAGE=kdfp-portal-kac:local
 AUTH_IMAGE=kdfp-portal-auth:local
+AUDIT_IMAGE=kdfp-portal-audit:local
 ```
 
 ```sh
