@@ -1,17 +1,5 @@
 # Рабочее место
 
-Оболочка портала — SPA на Vue 3 + Nuxt UI (`apps/portal/src`), собирается в образ стадией `node:24-alpine`. Меню по-прежнему берётся из `/portal/tools.json`, инструменты открываются в iframe с `?embed=1`.
-
-Локальная разработка оболочки:
-
-```sh
-cd apps/portal
-npm ci
-npm run dev   # http://127.0.0.1:5173/
-```
-
-Для локальной разработки с живыми инструментами поднимите Compose и проксируйте `/bookmarks`, `/signatures`, `/trench`, `/kac` на `127.0.0.1:8090` (см. `server.proxy` в `vite.config.mjs`).
-
 Соберите нужные образы командами из корневого README. Для локального запуска всех инструментов из `deploy/portal` задайте в `.env` теги:
 
 ```dotenv
@@ -33,23 +21,3 @@ docker compose -f compose.yaml -f compose.kac-linux.yaml up -d --no-deps kac
 ```
 
 Для нового инструмента с собственным адресом добавьте ссылку в `catalog/tools.json`. Для встроенного инструмента также добавьте маршрут в `routes/`, проверьте конфигурацию `docker compose exec portal nginx -t` и примените её командой `docker compose exec portal nginx -s reload`.
-
-## Встраивание инструмента
-
-Портал открывает встроенные инструменты в iframe с параметром `?embed=1` и сам не трогает их документ. Инструмент отвечает за свой вид в обоих режимах:
-
-```js
-// embed.js, подключается в <head> до стилей
-if (window.self !== window.top || new URLSearchParams(window.location.search).has("embed")) {
-  document.documentElement.dataset.embedded = "";
-}
-```
-
-```css
-/* embedded.css */
-[data-embedded] header > .brand { display: none; }
-```
-
-Правила: собственная шапка инструмента скрывается только при `[data-embedded]`; самостоятельный запуск (`docker run`) её сохраняет. Портал не вставляет стили в чужой документ и не требует доступа к `contentDocument`.
-
-Дополнительно: инструмент должен разрешать встраивание заголовком `Content-Security-Policy: frame-ancestors 'self'` и блокировать встраивание себя на чужих сайтах — `'self'`, а не `*`. У портала `frame-ancestors 'none'`.

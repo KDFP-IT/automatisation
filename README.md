@@ -4,15 +4,13 @@
 
 | Каталог | Инструмент | Сборка образа из корня |
 | --- | --- | --- |
-| [apps/kac](apps/kac) | Собрать КАЦ | `docker build -t kdfp-portal-kac:local -f apps/kac/Dockerfile .` |
+| [apps/kac](apps/kac) | Собрать КАЦ | `docker build -t kdfp-portal-kac:local apps/kac` |
 | [apps/bookmarks](apps/bookmarks) | Закладки PDF | `docker build -t kdfp-portal-bookmarks:local apps/bookmarks` |
 | [apps/signatures](apps/signatures) | Проверка подписантов | `docker build -t kdfp-portal-signatures:local apps/signatures` |
 | [apps/trench](apps/trench) | Калькулятор траншей | `docker build -f apps/trench/Dockerfile.portal -t kdfp-portal-trench:local apps/trench` |
-| [apps/portal](apps/portal) | Рабочее место | `docker build -t kdfp-portal-shell:local -f apps/portal/Dockerfile .` |
+| [apps/portal](apps/portal) | Рабочее место | `docker build -t kdfp-portal-shell:local apps/portal` |
 | [apps/office-chat](apps/office-chat) | Офисный чат | Сервер Python и клиент Windows |
 
 GitHub Actions собирает и проверяет КАЦ при изменениях в `apps/kac` и при изменении его workflow. Сборка основной ветки или ручной запуск сохраняет образ Linux amd64 с контрольной суммой в Artifacts. Образ можно импортировать командой `docker load -i kac-linux-amd64.tar.gz`.
 
 В [deploy/portal](deploy/portal) лежат Compose, меню и маршруты. Базы, рабочие документы и конфигурации с секретами хранятся вне Git. На действующем сервере сохраняйте имя Compose-проекта и привязки томов при обновлениях, включая `portal-data` калькулятора.
-
-Общие токены оформления — [packages/tokens/tokens.css](packages/tokens/tokens.css). Интерфейс КАЦ подключает их копией `apps/kac/ui/src/assets/tokens.css` (импорт в `main.css`); совпадение копии с каноном проверяет `npm test` в `apps/kac/ui`. Остальные инструменты переходят на токены по мере переноса интерфейса на Vue.
