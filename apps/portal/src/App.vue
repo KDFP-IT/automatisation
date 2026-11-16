@@ -32,19 +32,24 @@ onMounted(async () => {
 
 <template>
   <UApp>
-  <div class="grid h-dvh grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[248px_minmax(0,1fr)] md:grid-rows-none">
-    <aside class="flex flex-col gap-4 border-b border-default bg-default p-3 md:border-b-0 md:border-r">
+  <div class="grid min-h-dvh grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[248px_minmax(0,1fr)] md:grid-rows-none">
+    <aside class="flex min-h-full flex-col gap-4 border-b border-default bg-default p-3 md:min-h-dvh md:border-b-0 md:border-r">
       <div class="flex items-center gap-3 px-2 pt-1">
         <img src="/brand/kdfp-logo.webp" alt="КДФП Инжиниринг" width="146" height="39">
       </div>
       <p class="-mb-2 hidden px-2 text-sm font-semibold text-highlighted md:block">Рабочее место</p>
-      <UNavigationMenu
-        v-if="nav.length"
-        :items="nav"
-        orientation="vertical"
-        :highlight="true"
-        class="w-full"
-      />
+      <nav v-if="nav.length" aria-label="Инструменты" class="grid gap-1.5">
+        <RouterLink
+          v-for="item in nav"
+          :key="item.to"
+          :to="item.to"
+          class="flex items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-sm font-medium text-muted transition-colors hover:border-brand-100 hover:bg-brand-50/60 hover:text-brand-700"
+          active-class="border-brand-200 bg-brand-50 text-brand-700 shadow-sm"
+        >
+          <UIcon :name="item.icon" class="size-5 shrink-0" />
+          <span>{{ item.label }}</span>
+        </RouterLink>
+      </nav>
       <p v-else-if="loaded && error" class="px-2 text-sm text-error">{{ error }}</p>
     </aside>
 

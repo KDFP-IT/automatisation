@@ -2,23 +2,28 @@ import {decodeCms,extractExpected,matchPeople,parseName,checkDigest,correctExpec
 import {pageLines,inkEvidence} from './layout.mjs';
 import {digestHex} from './vendor/hash.mjs';
 const $=id=>document.getElementById(id);
-const state={files:[],expected:[],signers:[],rows:[],filter:'all',pdf:null,pdfBytes:null,pages:[],errors:[],mode:'actual',name:'',busy:false,run:0};
+const state={files:[],expected:[],signers:[],rows:[],filter:'all',pdf:null,pdfBytes:null,pages:[],errors:[],mode:'actual',name:'',busy:false,checked:false,run:0};
 const labels={found:'Найдена',missing:'Не найдена',review:'Уточнить'};
 function el(tag,text,cls){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e;}
 function showError(message){$('upload-error').textContent=message;$('upload-error').hidden=!message;}
 function fileList(){
   $('file-list').replaceChildren();
-  state.files.forEach((file,i)=>{const li=el('li');li.append(el('strong',/\.pdf$/i.test(file.name)?'PDF':'SIG'));const name=el('span',file.name,'file-name');name.append(el('small',`${(file.size/1024).toFixed(0)} КБ`));li.append(name);const remove=el('button','×');remove.type='button';remove.disabled=state.busy;remove.setAttribute('aria-label',`Убрать ${file.name}`);remove.onclick=()=>{state.files.splice(i,1);fileList();};li.append(remove);$('file-list').append(li);});
+  state.files.forEach((file,i)=>{const li=el('li');const badge=el('strong');if(/\.pdf$/i.test(file.name)){badge.className='pdf-badge';badge.innerHTML='<span>PDF</span>';}else{badge.textContent='SIG';}li.append(badge);const name=el('span',file.name,'file-name');li.append(name);const remove=el('button','×');remove.type='button';remove.disabled=state.busy;remove.setAttribute('aria-label',`Убрать ${file.name}`);remove.onclick=()=>{state.files.splice(i,1);state.checked=false;fileList();};li.append(remove);$('file-list').append(li);});
+  $('upload-panel')?.classList.toggle('has-files',state.files.length>0);
+  $('dropzone').hidden=state.files.length>0;
+  $('add-files').hidden=!state.files.length;
   $('analyze').disabled=state.busy||!state.files.some(f=>/\.pdf$/i.test(f.name));
-  $('analyze').replaceChildren(document.createTextNode(state.files.some(f=>/\.(sig|sgn|p7s)$/i.test(f.name))?'Сверить подписи':'Собрать список'),el('span','↗'));
+  $('analyze').replaceChildren(document.createElement('span').appendChild(document.createTextNode(state.checked?'Проверить заново':'Проверить подписантов')).parentNode,el('span','↗'));
 }
 function acceptFiles(files){
   if(state.busy)return;
   const errors=[];
   for(const file of files){const pdf=/\.pdf$/i.test(file.name);if(!/\.(pdf|sig|sgn|p7s)$/i.test(file.name)){errors.push(`Не поддержан: ${file.name}`);continue;}if(file.size>(pdf?100:10)*1024*1024){errors.push(`Слишком большой файл: ${file.name}`);continue;}if(state.files.some(f=>f.name===file.name&&f.size===file.size))continue;if(pdf)state.files=state.files.filter(f=>!/\.pdf$/i.test(f.name));state.files.push(file);}
+  if(state.files.length)state.checked=false;
   showError(errors.join('\n'));fileList();
 }
 $('files').onchange=e=>{acceptFiles(e.target.files);e.target.value='';};
+$('add-files').onclick=()=>{if(!state.busy)$('files').click();};
 for(const name of ['dragover','dragenter'])$('dropzone').addEventListener(name,e=>{e.preventDefault();$('dropzone').classList.add('dragging');});
 $('dropzone').ondragleave=()=>$('dropzone').classList.remove('dragging');
 $('dropzone').ondrop=e=>{e.preventDefault();$('dropzone').classList.remove('dragging');acceptFiles(e.dataTransfer.files);};
@@ -39,7 +44,7 @@ $('analyze').onclick=async()=>{
   const pageCount=Number($('page-count').value),pageStart=Number($('page-start').value);
   if($('scope').value==='first'&&(!Number.isInteger(pageCount)||pageCount<1||pageCount>200||!Number.isInteger(pageStart)||pageStart<1)){showError('Укажите начальную страницу и число страниц от 1 до 200.');return;}
   state.busy=true;fileList();$('files').disabled=true;$('scope').disabled=true;$('page-count').disabled=true;$('page-start').disabled=true;$('handwriting-check').disabled=true;$('apply').disabled=true;showError('');
-  const run=++state.run;
+  const run=++state.run;state.checked=false;
   try{
     $('progress').textContent='Открываем PDF…';
     const lib=await loadPdfjs();
@@ -58,7 +63,7 @@ $('analyze').onclick=async()=>{
     const expected=extractExpected(lines,await response.json());
     if(state.fingerprint===fingerprint)restoreHandwriting(expected,state.expected);
     if(!expected.length)errors.push('Фамилии автоматически не найдены. Проверьте страницы PDF и внесите список вручную. Для сканов требуется предварительное OCR.');
-    closePreview();const previous=state.pdf;state.pdf=doc;state.pdfBytes=bytes;state.fingerprint=fingerprint;state.pages=pages;state.expected=expected;state.signers=signers;state.errors=errors;state.name=pdfFile.name;state.mode='actual';
+    closePreview();const previous=state.pdf;state.pdf=doc;state.pdfBytes=bytes;state.fingerprint=fingerprint;state.pages=pages;state.expected=expected;state.signers=signers;state.errors=errors;state.name=pdfFile.name;state.mode='actual';state.checked=true;
     if(previous)await previous.destroy();
     $('preview-pages').replaceChildren();
     $('progress').textContent='';
@@ -79,10 +84,13 @@ function render(){
   $('report-filename').textContent=state.name;$('report-filename').hidden=!state.name;
   $('list-notice').textContent=state.errors.join(' ');$('list-notice').hidden=!state.errors.length;
   const counts={all:state.rows.length,missing:state.rows.filter(r=>r.status==='missing').length,review:state.rows.filter(r=>r.status==='review').length};
-  for(const button of document.querySelectorAll('[data-filter]')){const key=button.dataset.filter,label={all:'Все',missing:'Без подписи',review:'Проверить'}[key];button.textContent=label+(state.pdf?` ${counts[key]}`:'');}
+  for(const button of document.querySelectorAll('[data-filter]')){const key=button.dataset.filter,label={all:'Все',missing:'Без подписи',review:'Требуют проверки'}[key];button.replaceChildren(document.createTextNode(label),el('b',state.pdf?counts[key]:0));}
   const tbody=$('people');tbody.replaceChildren();
   const rows=state.rows.filter(p=>state.filter==='all'||p.status===state.filter);$('table-empty').hidden=!!rows.length;
-  $('table-empty').textContent=!state.pdf?'Список появится после обработки PDF.':!state.rows.length?'Фамилии не найдены. Добавьте их через «Изменить список».':'В этой категории записей нет.';
+  $('table-empty').replaceChildren();
+  if(!state.pdf){$('table-empty').innerHTML='<span class="empty-result-icon" aria-hidden="true"><svg viewBox="0 0 64 64" class="file-icon"><path d="M17 5h22l13 13v41H17z"></path><path d="M39 5v14h13M24 45c3-7 5-9 7-5 2 5 4 4 8-4"></path></svg></span><strong>Результаты появятся после обработки</strong><span>Загрузите PDF и запустите проверку</span>';}
+  else if(!state.rows.length){$('table-empty').append(el('strong','Фамилии не найдены.'),el('span','Добавьте их через «Изменить список».'));}
+  else if(!rows.length){$('table-empty').append(el('strong','В этой категории записей нет.'));}
   const pagesLabel=pages=>pages.slice(0,4).join(', ')+(pages.length>4?` и ещё ${pages.length-4}`:'');
   for(const row of rows){
     const index=state.rows.indexOf(row),tr=el('tr'),name=el('td');
