@@ -181,6 +181,7 @@ def create_kac_app():
                 jobs[key].update(status, finished=time.time())
                 info = dict(jobs[key])
             audit_event("build", info.get("audit_user"), app.logger,
+                        user_name=info.get("audit_name"),
                         status=status["status"], pages=status.get("pages"),
                         duration_ms=int((time.time() - info.get("started", time.time())) * 1000),
                         error=status.get("error"),
@@ -280,7 +281,9 @@ def create_kac_app():
             if sum("finished" not in job for job in jobs.values()) >= 4:
                 return jsonify(error="Очередь заполнена. Повторите после завершения сборки."), 429
             jobs[key] = {"owner": owner, "status": "queued", "stage": "queued", "progress": 0.05,
-                         "audit_user": request.headers.get("X-Auth-User", ""), "started": time.time()}
+                         "audit_user": request.headers.get("X-Auth-User", ""),
+                         "audit_name": request.headers.get("X-Auth-Name", ""),
+                         "started": time.time()}
         try:
             folder.mkdir()
             source = folder / "source.docx"
@@ -308,10 +311,11 @@ def create_kac_app():
             job = jobs.get(key)
             if job and job["owner"] == session.get("owner"):
                 if kind is None:
-                    return {k: v for k, v in job.items() if k not in {"owner", "finished", "audit_user", "started"}}
+                    return {k: v for k, v in job.items() if k not in {"owner", "finished", "audit_user", "audit_name", "started"}}
                 if job["status"] == "done" and kind in DOWNLOADS:
                     audit_event("download", job.get("audit_user") or request.headers.get("X-Auth-User", ""),
-                                app.logger, details={"kind": kind})
+                                app.logger, user_name=job.get("audit_name") or request.headers.get("X-Auth-Name", ""),
+                                details={"kind": kind})
                     file, name = DOWNLOADS[kind]
                     inline = kind == "pdf" and request.args.get("inline") == "1"
                     return send_file(root / key / file, as_attachment=not inline, download_name=name)

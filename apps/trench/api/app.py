@@ -20,11 +20,12 @@ def now():
 
 AUDIT_URL = os.environ.get("AUDIT_URL", "http://audit:8080")
 
-
 def audit_event(action, user, status="ok", **fields):
     """Fire-and-forget audit event; never breaks the request on failure."""
     if not user:
         return
+    if "user_name" not in fields and has_request_context():
+        fields["user_name"] = request.headers.get("X-Auth-Name", "")
     try:
         payload = json.dumps({"tool": "trench", "action": action, "user": user,
                               "status": status, **fields}).encode()

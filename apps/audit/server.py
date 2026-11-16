@@ -62,6 +62,7 @@ def init_db():
           ts TEXT NOT NULL,
           user_id TEXT NOT NULL,
           ad_login TEXT NOT NULL,
+          user_name TEXT NOT NULL DEFAULT '',
           tool TEXT NOT NULL,
           action TEXT NOT NULL,
           status TEXT NOT NULL DEFAULT 'ok',
@@ -81,6 +82,9 @@ def init_db():
           PRIMARY KEY (tool, action)
         );
         """)
+        cols = {row["name"] for row in db.execute("PRAGMA table_info(events)")}
+        if "user_name" not in cols:
+            db.execute("ALTER TABLE events ADD COLUMN user_name TEXT NOT NULL DEFAULT ''")
         stamp = now()
         db.executemany(
             "INSERT INTO norms(tool, action, minutes, updated_at) VALUES(?,?,?,?) "
@@ -146,12 +150,16 @@ class Handler(BaseHTTPRequestHandler):
             return
         user = (self.headers.get("X-Auth-User") or "").strip() \
             or str(data.get("user") or data.get("ad_login") or "").strip()
+        user_name = (self.headers.get("X-Auth-Name") or "").strip() \
+            or str(data.get("user_name") or "").strip()
         tool = str(data.get("tool") or "").strip()
         action = str(data.get("action") or "").strip()
         if not user or not tool or not action:
             self._send(400, {"error": "user_tool_action_required"})
             return
         ad_login = user.split("@")[0]
+        if not user_name:
+            user_name = ad_login
         try:
             minutes = data.get("saved_minutes")
             saved = float(minutes) if minutes is not None else lookup_minutes(tool, action)
@@ -166,10 +174,10 @@ class Handler(BaseHTTPRequestHandler):
             details_json = None
         with connect() as db:
             cursor = db.execute(
-                "INSERT INTO events(ts, user_id, ad_login, tool, action, status,"
+                "INSERT INTO events(ts, user_id, ad_login, user_name, tool, action, status,"
                 " pages, duration_ms, saved_minutes, error, details)"
-                " VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-                (now(), user, ad_login, tool[:64], action[:64],
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                (now(), user, ad_login, user_name[:180], tool[:64], action[:64],
                  str(data.get("status") or "ok")[:32],
                  data.get("pages"), data.get("duration_ms"), saved,
                  str(data.get("error") or "")[:1000] or None, details_json),
