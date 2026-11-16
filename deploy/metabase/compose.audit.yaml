@@ -1,0 +1,24 @@
+# Overlay: give the Metabase stack (see KDFP-10, PR #2) read access to the
+# audit events and trench catalogue SQLite files.
+#
+# Usage, from deploy/metabase:
+#   docker compose -f compose.yaml -f compose.audit.yaml up -d
+#
+# Volume names assume the portal stack runs with its default compose project
+# name (directory name `portal`). Check with `docker volume ls` on the VPS:
+# the audit volume holds audit.sqlite3, the portal volume trench.sqlite3
+# (portal-data). If the project name differs, rename the externals below.
+# Inside Metabase add two SQLite databases:
+#   audit  -> /audit/audit.sqlite3
+#   trench -> /trench-data/trench.sqlite3
+services:
+  metabase:
+    volumes:
+      - portal_audit-data:/audit:ro
+      - portal_portal-data:/trench-data:ro
+
+volumes:
+  portal_audit-data:
+    external: true
+  portal_portal-data:
+    external: true

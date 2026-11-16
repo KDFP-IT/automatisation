@@ -36,7 +36,30 @@ services:
     image: ${KAC_IMAGE:-kdfp-portal-kac:1.0.0}
     environment:
       KAC_WORKER_URL: "${KAC_WORKER_URL:-}"
+  auth:
+    <<: *service
+    image: ${AUTH_IMAGE:-kdfp-portal-auth:1.0.0}
+    environment:
+      AUTH_MODE: "${AUTH_MODE:-local}"
+      SESSION_SECRET: "${SESSION_SECRET:-}"
+      SESSION_TTL_H: "${SESSION_TTL_H:-12}"
+      COOKIE_SECURE: "${COOKIE_SECURE:-1}"
+      LDAP_URL: "${LDAP_URL:-}"
+      LDAP_TLS_MODE: "${LDAP_TLS_MODE:-}"
+      LDAP_BASE_DN: "${LDAP_BASE_DN:-}"
+      LDAP_DOMAIN: "${LDAP_DOMAIN:-kdfp.ru}"
+      LDAP_TIMEOUT_S: "${LDAP_TIMEOUT_S:-5}"
+      LOCAL_LOGIN: "${LOCAL_LOGIN:-}"
+      LOCAL_PASSWORD: "${LOCAL_PASSWORD:-}"
+    volumes:
+      - ./access:/etc/auth:ro
+  audit:
+    <<: *service
+    image: ${AUDIT_IMAGE:-kdfp-portal-audit:1.0.0}
+    volumes:
+      - audit-data:/data
 
 volumes:
   portal-data:
   bookmarks-data:
+  audit-data:

@@ -1,0 +1,18 @@
+# Access matrix: AD group DN -> portal tool. Deny-by-default: a tool is
+# visible and reachable only through a listed group (or an admin group).
+# Adjust every DN to the real AD layout before going live (OU names, etc.),
+# then verify with scripts/verify-ad.py from the VPS.
+base_group = "CN=KDFP-Portal-Users,OU=KDFP,DC=kdfp,DC=ru"
+admin_groups = ["CN=KDFP-Portal-Admins,OU=KDFP,DC=kdfp,DC=ru"]
+
+[tools.bookmarks]
+groups = ["CN=KDFP-Bookmarks,OU=KDFP,DC=kdfp,DC=ru"]
+
+[tools.signatures]
+groups = ["CN=KDFP-Signatures,OU=KDFP,DC=kdfp,DC=ru"]
+
+[tools.trench]
+groups = ["CN=KDFP-Trench,OU=KDFP,DC=kdfp,DC=ru"]
+
+[tools.kac]
+groups = ["CN=KDFP-KAC,OU=KDFP,DC=kdfp,DC=ru"]
