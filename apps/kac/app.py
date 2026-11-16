@@ -42,6 +42,22 @@ def upload_path(name):
         raise ValueError("КП должны лежать в папках вида «Раздел 1 - Контактная сеть».")
     return int(section[1]), folder, filename, "/".join(parts[:-1])
 
+AUDIT_URL = os.environ.get("AUDIT_URL", "http://audit:8080")
+
+
+def audit_event(action, user, logger=None, **fields):
+    """Fire-and-forget audit event; never breaks the request on failure."""
+    if not user:
+        return
+    try:
+        payload = json.dumps({"tool": "kac", "action": action, "user": user, **fields}).encode()
+        urlopen(Request(AUDIT_URL + "/audit/event", data=payload,
+                        headers={"Content-Type": "application/json"}, method="POST"),
+                timeout=2).close()
+    except Exception:
+        if logger is not None:
+            logger.exception("KAC audit event %s lost", action)
+
 
 def create_kac_app():
     app = Flask(__name__, static_folder=None)
@@ -163,6 +179,12 @@ def create_kac_app():
                 shutil.rmtree(folder / name, ignore_errors=True)
             with lock:
                 jobs[key].update(status, finished=time.time())
+                info = dict(jobs[key])
+            audit_event("build", info.get("audit_user"), app.logger,
+                        status=status["status"], pages=status.get("pages"),
+                        duration_ms=int((time.time() - info.get("started", time.time())) * 1000),
+                        error=status.get("error"),
+                        details={"sections": status.get("sections")} if status.get("sections") else None)
 
     @app.after_request
     def headers(response):
@@ -257,7 +279,8 @@ def create_kac_app():
         with lock:
             if sum("finished" not in job for job in jobs.values()) >= 4:
                 return jsonify(error="Очередь заполнена. Повторите после завершения сборки."), 429
-            jobs[key] = {"owner": owner, "status": "queued", "stage": "queued", "progress": 0.05}
+            jobs[key] = {"owner": owner, "status": "queued", "stage": "queued", "progress": 0.05,
+                         "audit_user": request.headers.get("X-Auth-User", ""), "started": time.time()}
         try:
             folder.mkdir()
             source = folder / "source.docx"
@@ -285,8 +308,10 @@ def create_kac_app():
             job = jobs.get(key)
             if job and job["owner"] == session.get("owner"):
                 if kind is None:
-                    return {k: v for k, v in job.items() if k not in {"owner", "finished"}}
+                    return {k: v for k, v in job.items() if k not in {"owner", "finished", "audit_user", "started"}}
                 if job["status"] == "done" and kind in DOWNLOADS:
+                    audit_event("download", job.get("audit_user") or request.headers.get("X-Auth-User", ""),
+                                app.logger, details={"kind": kind})
                     file, name = DOWNLOADS[kind]
                     inline = kind == "pdf" and request.args.get("inline") == "1"
                     return send_file(root / key / file, as_attachment=not inline, download_name=name)

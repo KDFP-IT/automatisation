@@ -18,6 +18,22 @@ from werkzeug.exceptions import HTTPException
 def now():
     return datetime.now(timezone.utc).isoformat(timespec='milliseconds')
 
+AUDIT_URL = os.environ.get("AUDIT_URL", "http://audit:8080")
+
+
+def audit_event(action, user, status="ok", **fields):
+    """Fire-and-forget audit event; never breaks the request on failure."""
+    if not user:
+        return
+    try:
+        payload = json.dumps({"tool": "trench", "action": action, "user": user,
+                              "status": status, **fields}).encode()
+        urlopen(Request(AUDIT_URL + "/audit/event", data=payload,
+                        headers={"Content-Type": "application/json"}, method="POST"),
+                timeout=2).close()
+    except Exception:
+        print(f"trench audit event {action} lost", flush=True)
+
 
 def name(value, fallback=None):
     value = value if value is not None else fallback
@@ -248,7 +264,9 @@ def create_app(database_path=None):
         title = name(payload().get('name')); pid = str(uuid.uuid4()); stamp = now()
         with db() as connection:
             connection.execute('INSERT INTO projects(id,name,created_at,updated_at) VALUES(?,?,?,?)', (pid, title, stamp, stamp))
-            return jsonify(project(connection, pid)), 201
+            value = project(connection, pid)
+            audit_event('project_create', request.headers.get('X-Auth-User', ''), details={'project': title})
+            return jsonify(value), 201
 
     @app.get('/api/projects/<pid>')
     def get_project(pid):
@@ -272,7 +290,10 @@ def create_app(database_path=None):
         body = payload(); model = body.get('model'); title = name(body.get('name'), model.get('name') if isinstance(model, dict) else None)
         with db() as connection:
             if project(connection, pid) is None: return jsonify(error='Проект не найден.'), 404
-            return jsonify(insert_scheme(connection, pid, title, model)), 201
+            value = insert_scheme(connection, pid, title, model)
+            audit_event('scheme_create', request.headers.get('X-Auth-User', ''),
+                        details={'scheme': title, 'wells': value.get('well_count'), 'edges': value.get('edge_count')})
+            return jsonify(value), 201
 
     @app.get('/api/schemes/<sid>')
     def get_scheme(sid):
@@ -292,10 +313,15 @@ def create_app(database_path=None):
             active(dict(row)); active(project(connection, row['project_id']))
             stamp = now(); serialized = json.dumps(model, ensure_ascii=False, allow_nan=False)
             updated = connection.execute('UPDATE schemes SET name=?,model_json=?,revision=revision+1,updated_at=? WHERE id=? AND revision=?', (title, serialized, stamp, sid, expected))
-            if not updated.rowcount: return jsonify(error='Схема изменена другим инженером.', revision=row['revision']), 409
+            if not updated.rowcount:
+                audit_event('scheme_save', request.headers.get('X-Auth-User', ''), status='conflict',
+                            details={'scheme': title, 'expected_revision': expected, 'actual_revision': row['revision']})
+                return jsonify(error='Схема изменена другим инженером.', revision=row['revision']), 409
             connection.execute('INSERT INTO scheme_versions VALUES(?,?,?,?)', (sid, row['revision'], row['model_json'], stamp))
             connection.execute('DELETE FROM scheme_versions WHERE scheme_id=? AND revision < ?', (sid, max(0, expected-19)))
             connection.execute('UPDATE projects SET updated_at=?,revision=revision+1 WHERE id=?', (stamp, row['project_id']))
+            audit_event('scheme_save', request.headers.get('X-Auth-User', ''),
+                        details={'scheme': title, 'revision': expected + 1})
             return jsonify(scheme(connection, sid, False))
 
     @app.post('/api/schemes/<sid>/copy')
@@ -306,7 +332,9 @@ def create_app(database_path=None):
             active(original)
             title = name(payload().get('name'), original['name']+' — копия')
             model = original['model']; model['id'] = str(uuid.uuid4()); model['name'] = title
-            return jsonify(insert_scheme(connection, original['project_id'], title, model)), 201
+            value = insert_scheme(connection, original['project_id'], title, model)
+            audit_event('scheme_create', request.headers.get('X-Auth-User', ''), details={'scheme': title, 'copied': True})
+            return jsonify(value), 201
 
     @app.post('/api/projects/<pid>/copy')
     def copy_project(pid):
@@ -320,6 +348,7 @@ def create_app(database_path=None):
                 item = scheme(connection, row['id']); item['model']['id'] = str(uuid.uuid4())
                 copied = insert_scheme(connection, new_id, item['name'], item['model'])
                 if row['archived_at']: connection.execute('UPDATE schemes SET archived_at=? WHERE id=?', (now(), copied['id']))
+            audit_event('project_create', request.headers.get('X-Auth-User', ''), details={'project': title, 'copied': True})
             return jsonify(project(connection, new_id)), 201
 
     @app.post('/api/import')
@@ -338,6 +367,7 @@ def create_app(database_path=None):
             connection.execute('INSERT INTO projects(id,name,created_at,updated_at) VALUES(?,?,?,?)', (pid, title, stamp, stamp))
             item = insert_scheme(connection, pid, model['name'], model)
             connection.execute('INSERT INTO imports VALUES(?,?)', (token, item['id']))
+            audit_event('scheme_create', request.headers.get('X-Auth-User', ''), details={'scheme': model['name'], 'imported': True})
             return jsonify(item), 201
 
     def require_revision(body, value):
@@ -370,8 +400,10 @@ def create_app(database_path=None):
             if kind == 'project':
                 # Invalidate editors opened before the project was archived/trashed and restored.
                 connection.execute('UPDATE schemes SET revision=revision+1 WHERE project_id=?', (object_id,))
+                audit_event('state_change', request.headers.get('X-Auth-User', ''), details={'kind': kind, 'action': action})
                 return jsonify(project(connection, object_id))
             connection.execute('UPDATE projects SET updated_at=?,revision=revision+1 WHERE id=?', (now(), value['project_id']))
+            audit_event('state_change', request.headers.get('X-Auth-User', ''), details={'kind': kind, 'action': action})
             return jsonify(scheme(connection, object_id, False))
 
     @app.post('/api/projects/<pid>/state')
