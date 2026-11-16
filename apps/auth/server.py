@@ -65,6 +65,7 @@ LDAP_URL = env("LDAP_URL")
 LDAP_TLS_MODE = env("LDAP_TLS_MODE", "").strip().lower()
 LDAP_BASE_DN = env("LDAP_BASE_DN")
 LDAP_DOMAIN = env("LDAP_DOMAIN")
+LDAP_CA_FILE = env("LDAP_CA_FILE")
 LDAP_TIMEOUT = int(env("LDAP_TIMEOUT_S", "5"))
 if AUTH_MODE == "ldap" and not (LDAP_URL and LDAP_BASE_DN and LDAP_DOMAIN):
     fail("LDAP_URL, LDAP_BASE_DN and LDAP_DOMAIN are required in ldap mode")
@@ -134,7 +135,8 @@ def ldap_check_groups(upn: str, password: str) -> tuple[str, set[str]]:
     else:
         raise ConnectionError(f"LDAP_URL scheme must be ldap(s), got {scheme!r}")
 
-    tls = Tls(validate=ssl.CERT_REQUIRED, version=ssl.PROTOCOL_TLS_CLIENT)
+    tls = Tls(validate=ssl.CERT_REQUIRED, version=ssl.PROTOCOL_TLS_CLIENT,
+              ca_certs_file=LDAP_CA_FILE or None)
     try:
         server = Server(host, port=port or None, use_ssl=use_ssl, tls=tls,
                         connect_timeout=LDAP_TIMEOUT)

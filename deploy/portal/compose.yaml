@@ -49,6 +49,7 @@ services:
       LDAP_BASE_DN: "${LDAP_BASE_DN:-}"
       LDAP_DOMAIN: "${LDAP_DOMAIN:-kdfp.ru}"
       LDAP_TIMEOUT_S: "${LDAP_TIMEOUT_S:-5}"
+      LDAP_CA_FILE: "${LDAP_CA_FILE:-}"
       LOCAL_LOGIN: "${LOCAL_LOGIN:-}"
       LOCAL_PASSWORD: "${LOCAL_PASSWORD:-}"
     volumes:
