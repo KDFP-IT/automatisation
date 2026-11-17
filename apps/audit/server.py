@@ -22,10 +22,23 @@ import os
 import sqlite3
 from datetime import datetime, UTC
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from email.header import decode_header, make_header
 
 BODY_LIMIT = 64 * 1024
 DB_PATH = os.environ.get("AUDIT_DB_PATH", "/data/audit.sqlite3")
 PORT = int(os.environ.get("PORT", "8080"))
+
+
+def auth_display_name(value):
+    """Decode the RFC 2047 X-Auth-Name header set by portal auth.
+
+    Plain ASCII values (old auth) pass through unchanged; decoding never
+    raises — display-only data for events.
+    """
+    try:
+        return str(make_header(decode_header(value or "")))
+    except Exception:
+        return value or ""
 
 SEED_NORMS = [
     # (tool, action, minutes of manual work saved per action — estimates)
@@ -150,7 +163,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         user = (self.headers.get("X-Auth-User") or "").strip() \
             or str(data.get("user") or data.get("ad_login") or "").strip()
-        user_name = (self.headers.get("X-Auth-Name") or "").strip() \
+        user_name = auth_display_name(self.headers.get("X-Auth-Name")).strip() \
             or str(data.get("user_name") or "").strip()
         tool = str(data.get("tool") or "").strip()
         action = str(data.get("action") or "").strip()

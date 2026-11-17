@@ -16,6 +16,7 @@ import time
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 from zipfile import ZipFile
+from email.header import decode_header, make_header
 
 from flask import Flask, Response, jsonify, request, send_file, send_from_directory, session
 
@@ -26,6 +27,18 @@ WINDOWS_RESERVED = re.compile(r"(?:CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³]
 DOWNLOADS = {"pdf": ("result.pdf", "КАЦ — готовый комплект.pdf"),
              "zip": ("images.zip", "КАЦ — картинки по разделам.zip")}
 TTL = 3600
+
+
+def auth_display_name(value):
+    """Decode the RFC 2047 X-Auth-Name header set by portal auth.
+
+    Plain ASCII values (old auth) pass through unchanged; decoding never
+    raises — display-only data for audit events.
+    """
+    try:
+        return str(make_header(decode_header(value or "")))
+    except Exception:
+        return value or ""
 
 
 def upload_path(name):
@@ -282,7 +295,7 @@ def create_kac_app():
                 return jsonify(error="Очередь заполнена. Повторите после завершения сборки."), 429
             jobs[key] = {"owner": owner, "status": "queued", "stage": "queued", "progress": 0.05,
                          "audit_user": request.headers.get("X-Auth-User", ""),
-                         "audit_name": request.headers.get("X-Auth-Name", ""),
+                         "audit_name": auth_display_name(request.headers.get("X-Auth-Name", "")),
                          "started": time.time()}
         try:
             folder.mkdir()
@@ -314,7 +327,7 @@ def create_kac_app():
                     return {k: v for k, v in job.items() if k not in {"owner", "finished", "audit_user", "audit_name", "started"}}
                 if job["status"] == "done" and kind in DOWNLOADS:
                     audit_event("download", job.get("audit_user") or request.headers.get("X-Auth-User", ""),
-                                app.logger, user_name=job.get("audit_name") or request.headers.get("X-Auth-Name", ""),
+                                app.logger, user_name=job.get("audit_name") or auth_display_name(request.headers.get("X-Auth-Name", "")),
                                 details={"kind": kind})
                     file, name = DOWNLOADS[kind]
                     inline = kind == "pdf" and request.args.get("inline") == "1"

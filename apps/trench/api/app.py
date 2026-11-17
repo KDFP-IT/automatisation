@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
+from email.header import decode_header, make_header
 from urllib.request import Request, urlopen
 
 from flask import Flask, jsonify, request, abort, has_request_context
@@ -25,7 +26,7 @@ def audit_event(action, user, status="ok", **fields):
     if not user:
         return
     if "user_name" not in fields and has_request_context():
-        fields["user_name"] = request.headers.get("X-Auth-Name", "")
+        fields["user_name"] = auth_display_name(request.headers.get("X-Auth-Name", ""))
     try:
         payload = json.dumps({"tool": "trench", "action": action, "user": user,
                               "status": status, **fields}).encode()
@@ -34,6 +35,18 @@ def audit_event(action, user, status="ok", **fields):
                 timeout=2).close()
     except Exception:
         print(f"trench audit event {action} lost", flush=True)
+
+
+def auth_display_name(value):
+    """Decode the RFC 2047 X-Auth-Name header set by portal auth.
+
+    Plain ASCII values (old auth) pass through unchanged; decoding never
+    raises — display-only data for audit events.
+    """
+    try:
+        return str(make_header(decode_header(value or "")))
+    except Exception:
+        return value or ""
 
 
 def name(value, fallback=None):
