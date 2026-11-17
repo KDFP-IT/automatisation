@@ -15,6 +15,7 @@ import sys
 import threading
 import time
 from urllib.request import Request, urlopen
+from email.header import decode_header, make_header
 from flask import Flask, jsonify, request, send_file, session
 from werkzeug.exceptions import HTTPException
 
@@ -37,6 +38,18 @@ def audit_event(action, user, logger, **fields):
                 timeout=2).close()
     except Exception:
         logger.exception("Bookmarks audit event %s lost", action)
+
+
+def auth_display_name(value):
+    """Decode the RFC 2047 X-Auth-Name header set by portal auth.
+
+    Plain ASCII values (old auth) pass through unchanged; decoding never
+    raises — display-only data for audit events.
+    """
+    try:
+        return str(make_header(decode_header(value or "")))
+    except Exception:
+        return value or ""
 
 
 def create_app(config=None):
@@ -185,7 +198,7 @@ def create_app(config=None):
             filename = "".join(char for char in filename if ord(char) >= 32)[:180] or "document.pdf"
             jobs[key] = {"owner": session["owner"], "filename": filename, "status": "uploading",
                          "audit_user": request.headers.get("X-Auth-User", ""),
-                         "audit_name": request.headers.get("X-Auth-Name", ""),
+                         "audit_name": auth_display_name(request.headers.get("X-Auth-Name", "")),
                          "started": time.time()}
         folder = job_root / key
         try:
@@ -227,7 +240,7 @@ def create_app(config=None):
         if not job or job["status"] != "done" or kind not in {"pdf", "csv"}:
             return jsonify(error="Файл недоступен. Загрузите PDF заново."), 404
         audit_event("download", job.get("audit_user") or request.headers.get("X-Auth-User", ""),
-                    app.logger, user_name=job.get("audit_name") or request.headers.get("X-Auth-Name", ""),
+                    app.logger, user_name=job.get("audit_name") or auth_display_name(request.headers.get("X-Auth-Name", "")),
                     details={"kind": kind})
         path = job_root / key / ("result.pdf" if kind == "pdf" else "bookmarks.csv")
         stem = Path(job["filename"]).stem

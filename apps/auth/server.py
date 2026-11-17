@@ -16,6 +16,7 @@ new logins fail (503).
 """
 
 import base64
+from email.header import Header
 import hashlib
 import hmac
 import json
@@ -33,6 +34,23 @@ BODY_LIMIT = 8 * 1024
 FAIL_WINDOW_S = 300
 FAIL_MAX = 5
 IN_CHAIN = "1.2.840.113556.1.4.1941"
+
+
+def display_header(value: str) -> str:
+    """Encode a display name for an HTTP header (RFC 2047).
+
+    stdlib http.server send_header() only speaks latin-1: a raw Cyrillic
+    displayName raises UnicodeEncodeError, drops the auth_request
+    subrequest connection and nginx answers 500 to every gated tool
+    request. ASCII names go through byte-identical to before; only
+    non-latin-1 names are encoded.
+    """
+    value = value or ""
+    try:
+        value.encode("latin-1")
+        return value
+    except UnicodeEncodeError:
+        return Header(value, "utf-8").encode()
 
 
 def env(name, default=""):
@@ -257,7 +275,7 @@ class Handler(BaseHTTPRequestHandler):
             if not tool or tool in session["t"] or session["a"]:
                 self._send(200, {"ok": True},
                            {"X-Auth-User": session["u"],
-                            "X-Auth-Name": session.get("n", "")})
+                            "X-Auth-Name": display_header(session.get("n", ""))})
             else:
                 self._send(403, {"error": "forbidden", "tool": tool})
         else:
