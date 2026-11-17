@@ -91,4 +91,3 @@ dialog { position:fixed; inset:0; margin:auto; max-width:calc(100vw - 32px); max
 .results .table-footer :deep(#export),.results .table-footer :deep(#preview-button) { display:inline-flex; align-items:center; justify-content:center; gap:8px; align-self:flex-start; height:40px; min-height:40px; padding:8px 14px; border:1px solid var(--ui-border-accented); border-radius:8px; background:var(--ui-bg); color:var(--ui-text); font-size:14px; font-weight:600; line-height:1.4; text-decoration:none; box-shadow:none; }
 .results .table-footer :deep(#export:hover:not(:disabled)),.results .table-footer :deep(#preview-button:hover:not(:disabled)) { background:var(--ui-bg-muted); color:var(--ui-primary); }
 </style>
-
