@@ -1,0 +1,72 @@
+/* Project library visual treatment. Keep the existing controller and actions. */
+:root{--project-primary:#a63f00;--project-hover:#873300;--project-text:#343b3f;--project-muted:#626a6d;--project-border:#d3d6d5;--project-paper:#f4f5f4}
+.project-library:is([data-screen=projects],[data-screen=schemes]){max-width:1440px;padding:32px; background:var(--project-paper);color:var(--project-text)}
+:is([data-screen=projects],[data-screen=schemes]) .library-top{align-items:flex-start;margin-bottom:28px}
+:is([data-screen=projects],[data-screen=schemes]) .library-top h1{font-size:36px;line-height:1.2;letter-spacing:-.035em;color:#171a1d;margin-bottom:12px}
+:is([data-screen=projects],[data-screen=schemes]) .library-top p{font-size:14px;color:var(--project-muted);line-height:1.6}
+:is([data-screen=projects],[data-screen=schemes]) button{min-height:40px;padding:9px 14px;border-radius:8px;border-color:var(--project-border);color:var(--project-text);box-shadow:none;font-size:14px}
+:is([data-screen=projects],[data-screen=schemes]) button:hover:not(:disabled){background:#fcfcfb;border-color:#81898a}
+:is([data-screen=projects],[data-screen=schemes]) .library-primary{background:var(--project-primary);border-color:transparent;color:white;font-weight:600}
+:is([data-screen=projects],[data-screen=schemes]) .library-primary:hover:not(:disabled){background:var(--project-hover);border-color:transparent}
+:is([data-screen=projects],[data-screen=schemes]) .library-views{gap:20px;border-color:var(--project-border);padding-bottom:0;margin-bottom:24px}
+:is([data-screen=projects],[data-screen=schemes]) .library-views button{padding:12px 14px;border-radius:0;border:0;border-bottom:2px solid transparent;background:none;color:var(--project-muted)}
+:is([data-screen=projects],[data-screen=schemes]) .library-views button.active{color:var(--project-primary);border-bottom-color:var(--project-primary);background:none}
+:is([data-screen=projects],[data-screen=schemes]) .library-search{justify-content:flex-start;margin-bottom:28px;gap:12px}
+:is([data-screen=projects],[data-screen=schemes]) .library-search input{max-width:460px;border-color:var(--project-border);color:var(--project-text);border-radius:8px;font-size:14px}
+:is([data-screen=projects],[data-screen=schemes]) .library-search button{margin-left:0;background:white;border:1px solid var(--project-border);font-size:14px}
+:is([data-screen=projects],[data-screen=schemes]) .library-cards{gap:20px;grid-template-columns:repeat(3,minmax(0,1fr))}
+:is([data-screen=projects],[data-screen=schemes]) .library-card{border-color:var(--project-border);border-radius:12px;box-shadow:none}
+:is([data-screen=projects],[data-screen=schemes]) .library-card-open{min-height:170px;padding:22px;color:var(--project-text);border-radius:12px 12px 0 0}
+:is([data-screen=projects],[data-screen=schemes]) .library-card h2{color:#171a1d;font-size:20px;line-height:1.5}
+:is([data-screen=projects],[data-screen=schemes]) .library-card p{color:var(--project-muted);font-size:14px}
+:is([data-screen=projects],[data-screen=schemes]) .library-card small{color:var(--project-muted);font-size:13px}
+:is([data-screen=projects],[data-screen=schemes]) .library-card-icon{background:var(--project-paper);color:var(--project-muted);font-size:22px}
+:is([data-screen=projects],[data-screen=schemes]) .library-card-actions{background:white;padding:14px;gap:8px;border-color:#e8eae8;justify-content:flex-start}
+:is([data-screen=projects],[data-screen=schemes]) .library-card-actions button,:is([data-screen=projects],[data-screen=schemes]) .library-card-menu>summary{font-size:13px;min-height:36px;padding:7px 10px;border:1px solid var(--project-border);border-radius:7px;color:var(--project-text);background:white}
+:is([data-screen=projects],[data-screen=schemes]) .library-card-menu{color:var(--project-text)}
+:is([data-screen=projects],[data-screen=schemes]) .library-empty{background:white;border-color:var(--project-border)}
+:is([data-screen=projects],[data-screen=schemes]) .library-empty strong{color:var(--project-text)}
+:is([data-screen=projects],[data-screen=schemes]) .library-empty span{color:var(--project-muted)}
+#library-dialog{position:fixed;inset:0;margin:auto;max-width:calc(100vw - 32px);width:560px;border:1px solid var(--project-border);border-radius:12px;padding:24px;color:var(--project-text);background:white}
+#library-dialog h2{color:#171a1d;font-size:24px}
+#library-dialog label,#library-dialog-message{color:var(--project-muted)}
+#library-dialog input{border-color:var(--project-border);color:var(--project-text);border-radius:8px}
+#library-dialog .library-dialog-actions button{min-height:40px;padding:9px 16px;border-radius:8px;color:var(--project-text);border-color:var(--project-border);box-shadow:none}
+#library-dialog .library-dialog-actions #library-submit{background:var(--project-primary);color:#fff;border:0}
+#library-dialog .library-primary:hover:not(:disabled){background:var(--project-hover)}
+#library-dialog .library-primary.danger{background:#832b24}
+:is([data-screen=projects],[data-screen=schemes]) .library-card{display:flex;flex-direction:column;min-width:0}
+:is([data-screen=projects],[data-screen=schemes]) .library-card h2{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;overflow-wrap:normal}
+:is([data-screen=projects],[data-screen=schemes]) .library-card p,:is([data-screen=projects],[data-screen=schemes]) .library-card small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+:is([data-screen=projects],[data-screen=schemes]) .library-card-open{height:170px;min-height:170px;max-height:170px;flex:0 0 170px}
+:is([data-screen=projects],[data-screen=schemes]) .library-card-actions{min-height:68px;flex-wrap:nowrap}
+:is([data-screen=projects],[data-screen=schemes]) .library-card-actions>button{white-space:nowrap}
+:is([data-screen=projects],[data-screen=schemes]) .library-card-menu{border:0;background:transparent;padding:0;box-shadow:none}
+:is([data-screen=projects],[data-screen=schemes]) .library-card-menu>summary{display:flex;align-items:center;list-style:none;white-space:nowrap}
+:is([data-screen=projects],[data-screen=schemes]) .library-card-menu>summary::marker{content:''}
+:is([data-screen=projects],[data-screen=schemes]) .library-card-menu>summary::-webkit-details-marker{display:none}
+:is([data-screen=projects],[data-screen=schemes]) #library-new{min-height:44px;padding:11px 22px;font-size:16px}
+:is([data-screen=projects],[data-screen=schemes]) #library-new{display:inline-flex;align-items:center;justify-content:center;gap:12px}
+:is([data-screen=projects],[data-screen=schemes]) #library-new svg{flex-shrink:0;width:22px;height:22px}
+:is([data-screen=projects],[data-screen=schemes]) #library-new{height:40px;min-height:40px;min-width:0;padding:9px 14px;gap:8px;font-size:14px;font-weight:600;color:#fff}
+:is([data-screen=projects],[data-screen=schemes]) #library-new svg{width:20px;height:20px;stroke-width:1.8}
+:is([data-screen=projects],[data-screen=schemes]) .library-card p,:is([data-screen=projects],[data-screen=schemes]) .library-card small{display:flex;align-items:center;gap:12px;line-height:1.6}
+:is([data-screen=projects],[data-screen=schemes]) .library-card-open svg.project-meta-icon{display:inline-block;width:22px;height:22px;min-width:22px;max-width:22px;min-height:22px;max-height:22px;flex:0 0 22px;vertical-align:middle;color:#626a6d;margin:0;aspect-ratio:1}
+:is([data-screen=projects],[data-screen=schemes]) .library-card-open p,:is([data-screen=projects],[data-screen=schemes]) .library-card-open small{min-height:24px;max-height:28px;height:28px;position:static}
+:is([data-screen=projects],[data-screen=schemes]) .library-card small span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+:is([data-screen=projects],[data-screen=schemes]) .library-cards{align-items:start;grid-auto-rows:max-content}
+:is([data-screen=projects],[data-screen=schemes]) .library-card{align-self:start;height:auto;max-height:270px}
+:is([data-screen=projects],[data-screen=schemes]) .library-card-icon{display:none}
+:is([data-screen=projects],[data-screen=schemes]) .library-card h2{font-size:24px;font-weight:700;margin:0 0 24px}
+:is([data-screen=projects],[data-screen=schemes]) .library-card-open{padding:24px}
+:is([data-screen=projects],[data-screen=schemes]) .library-card p{margin-bottom:12px}
+:is([data-screen=projects],[data-screen=schemes]) .library-card-actions{padding:16px;gap:10px}
+:is([data-screen=projects],[data-screen=schemes]) .library-card-actions>button,:is([data-screen=projects],[data-screen=schemes]) .library-card-menu>summary{background:white;border:1px solid var(--project-border);padding:8px 12px;min-height:38px}
+:is([data-screen=projects],[data-screen=schemes]) .library-card-menu>div{display:flex;flex-direction:column;gap:2px;min-width:180px;padding:5px;border:1px solid var(--project-border);border-radius:8px;background:white;box-shadow:0 8px 24px #1013151a}
+:is([data-screen=projects],[data-screen=schemes]) .library-card-menu:not([open])>div{display:none}
+:is([data-screen=projects],[data-screen=schemes]) .library-card-menu>div>button{display:block;width:100%;min-height:36px;padding:8px 12px;border:0;border-radius:5px;background:transparent;text-align:left;box-shadow:none}
+:is([data-screen=projects],[data-screen=schemes]) .library-card-menu>div>button:hover{background:var(--project-paper);border:0}
+#project-library:is([data-screen=projects],[data-screen=schemes]) .library-card-actions .library-card-menu>div>button.danger{color:#832b24}
+#project-library:is([data-screen=projects],[data-screen=schemes]) .library-card-actions .library-card-menu>div>button.danger:hover{background:#fff3f1;color:#832b24}
+@media(max-width:1250px){:is([data-screen=projects],[data-screen=schemes]) .library-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.project-library:is([data-screen=projects],[data-screen=schemes]){padding:20px 16px}:is([data-screen=projects],[data-screen=schemes]) .library-top h1{font-size:28px}:is([data-screen=projects],[data-screen=schemes]) .library-search{flex-wrap:wrap}:is([data-screen=projects],[data-screen=schemes]) .library-search button{font-size:14px}:is([data-screen=projects],[data-screen=schemes]) .library-cards{grid-template-columns:1fr}}
