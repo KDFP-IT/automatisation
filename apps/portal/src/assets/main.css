@@ -1,4 +1,5 @@
 @import "tailwindcss";
+
 @source "../../../../packages/kac-ui/src";
 @import "@nuxt/ui";
 @import "./tokens.css";
@@ -54,6 +55,8 @@
 @import "@fontsource/manrope/cyrillic-800.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
+
+.tool-navigation > a { border-radius: 12px !important; }
 
 @theme static {
   --font-sans: var(--k-font-sans);
@@ -132,4 +135,9 @@
     outline: 2px solid var(--ui-primary);
     outline-offset: 3px;
   }
+}
+
+/* Keep page width stable when routes have different content heights. */
+html {
+  scrollbar-gutter: stable;
 }
