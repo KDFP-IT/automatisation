@@ -2,24 +2,31 @@
 <html lang="ru">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Проверка подписантов — КДФП</title><link rel="icon" href="assets/favicon.svg"><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="embedded.css"><script src="embed.js"></script></head>
 <body>
-<header class="app-header"><a class="brand" href="https://www.kdfp.ru/" target="_blank" rel="noopener"><img src="assets/kdfp-logo.webp" alt="КДФП Инжиниринг"></a><h1>Проверка подписантов</h1></header>
-<main class="workspace">
- <section class="panel upload-panel" aria-labelledby="upload-title">
-  <h2 id="upload-title">Файлы</h2>
-  <div id="dropzone" class="dropzone"><span class="upload-icon" aria-hidden="true">↥</span><h3>Перетащите PDF и SIG</h3><p>SIG необязателен</p><label class="choose">Выбрать файлы<input id="files" type="file" accept=".pdf,.sig,.sgn,.p7s" multiple></label></div>
+<header class="app-header"><a class="brand" href="https://www.kdfp.ru/" target="_blank" rel="noopener"><img src="assets/kdfp-logo.webp" alt="КДФП Инжиниринг"></a></header>
+<main class="page-shell">
+ <div class="page-heading"><div><h1>Проверка подписантов</h1><p>Загрузите PDF-документ, чтобы найти и проверить подписи.</p></div></div>
+ <div class="workspace-card">
+ <div class="workspace">
+ <section id="upload-panel" class="panel upload-panel" aria-labelledby="upload-title">
+  <h2 id="upload-title"><span class="step-number">1</span><span class="empty-label">Загрузите документы</span><span class="loaded-label">Документы</span></h2>
+  <div id="dropzone" class="dropzone"><span class="upload-icon" aria-hidden="true"><svg viewBox="0 0 64 64" class="file-icon"><path d="M17 5h22l13 13v41H17z"/><path d="M39 5v14h13M24 45c3-7 5-9 7-5 2 5 4 4 8-4"/></svg></span><h3>Перетащите PDF и SIG сюда</h3><p>SIG — необязательно</p><label class="choose">Выбрать файлы<input id="files" type="file" accept=".pdf,.sig,.sgn,.p7s" multiple></label><small>PDF до 100 МБ</small></div>
   <ul id="file-list" class="file-list" aria-label="Выбранные файлы"></ul>
+  <button id="add-files" class="secondary add-files" type="button">＋ &nbsp;Добавить PDF или SIG</button>
   <details class="options"><summary>Параметры</summary><div class="settings"><label for="scope">Страницы</label><select id="scope"><option value="all">Весь документ</option><option value="first">Диапазон страниц</option></select><label for="page-start" id="page-start-label" hidden>Начать со страницы</label><input id="page-start" type="number" min="1" value="1" hidden><label for="page-count" id="page-label" hidden>Число страниц</label><input id="page-count" type="number" min="1" max="200" value="3" hidden><label class="handwriting-setting"><input id="handwriting-check" type="checkbox" checked> Проверять рукописные на чертежах</label></div></details>
-  <button class="primary" id="analyze" disabled>Собрать список <span>↗</span></button>
+  <button id="analyze" class="primary" type="button" disabled><span>Проверить подписантов</span><span>↗</span></button>
   <p class="process" id="progress" role="status" aria-live="polite"></p><div class="error" id="upload-error" role="alert" hidden></div>
  </section>
  <section class="panel results" aria-labelledby="result-title">
-  <div class="list-heading"><div><h2 id="result-title">Подписанты <span id="count-all" class="count">0</span></h2><p id="report-filename" hidden></p></div><button class="text-button" id="export" disabled>Скачать CSV ↓</button></div>
-  <div class="table-tools"><div class="tabs" role="group" aria-label="Фильтр результата"><button class="selected" data-filter="all">Все</button><button data-filter="missing">Без подписи</button><button data-filter="review">Проверить</button></div><button class="text-button" id="edit-list">Изменить список</button></div>
+  <div class="list-heading"><div><h2 id="result-title"><span class="step-number">2</span>Результаты проверки <span id="count-all" class="count" hidden>0</span></h2><p id="report-filename" hidden></p></div><div class="result-actions"><button class="secondary edit-list-button" id="edit-list">✎&nbsp; Изменить список</button></div></div>
+  <div class="table-tools"><div class="tabs" role="group" aria-label="Фильтр результата"><button class="selected" data-filter="all">Все <b>0</b></button><button data-filter="missing">Без подписи <b>0</b></button><button data-filter="review">Требуют проверки <b>0</b></button></div></div>
   <div class="error list-notice" id="list-notice" role="alert" hidden></div>
   <div class="table-wrap"><table><thead><tr><th scope="col">Фамилия / ФИО</th><th scope="col">Подписи</th><th scope="col">Результат</th></tr></thead><tbody id="people"></tbody></table></div>
-  <p class="table-empty" id="table-empty">Добавьте PDF, чтобы собрать список.</p>
-  <div class="table-footer" id="table-footer" hidden><span id="page-source"></span><button class="text-button" id="preview-button" hidden>Открыть PDF ↗</button></div>
+  <div class="table-empty" id="table-empty"><span class="empty-result-icon" aria-hidden="true"><svg viewBox="0 0 64 64" class="file-icon"><path d="M17 5h22l13 13v41H17z"/><path d="M39 5v14h13M24 45c3-7 5-9 7-5 2 5 4 4 8-4"/></svg></span><strong>Результаты появятся после обработки</strong><span>Загрузите PDF и запустите проверку</span></div>
+  <div class="table-footer" id="table-footer" hidden><span id="page-source"></span><div class="footer-links"><button class="text-button" id="export" disabled>Скачать CSV ↓</button><span class="footer-separator">|</span><button class="text-button" id="preview-button" hidden>Открыть PDF ↗</button></div></div>
  </section>
+ </div>
+ <div class="workspace-footer"><p>ⓘ&nbsp; <span id="footer-hint">Добавьте PDF для начала проверки</span></p></div>
+ </div>
 </main>
 <dialog id="list-editor" class="list-editor"><div class="dialog-head"><strong>Изменить список</strong><button class="text-button" id="close-list-editor" aria-label="Закрыть редактор списка">Закрыть ×</button></div><div class="editor-body"><label for="expected">Фамилия / ФИО — одна строка на человека</label><textarea id="expected" rows="9" spellcheck="false"></textarea><button class="primary" id="apply">Сохранить список</button><p id="editor-error" role="alert"></p></div></dialog>
 <dialog id="preview"><div class="dialog-head"><strong id="preview-title">Источник в PDF</strong><button class="text-button" id="close-preview" aria-label="Закрыть просмотр">Закрыть ×</button></div><div class="source-layout"><div class="source-document"><nav class="page-navigation" aria-label="Страницы PDF"><button class="secondary" id="page-prev" aria-label="Предыдущая страница">←</button><label for="preview-page">Страница</label><input id="preview-page" type="number" min="1" value="1"><span id="preview-total"></span><button id="preview-zoom" class="secondary" hidden>Весь лист</button><button class="secondary" id="page-next" aria-label="Следующая страница">→</button></nav><div id="preview-pages"></div></div><section class="source-editor" id="source-editor" aria-label="Исправление фамилии"><h3>Проверить запись</h3><p id="source-help"></p><label>Текст в PDF</label><blockquote id="source-text"></blockquote><div id="source-handwriting"></div><label for="source-name">Фамилия / ФИО</label><input id="source-name" autocomplete="off"><label for="source-role">Должность</label><input id="source-role" autocomplete="off"><button class="primary" id="source-save">Сохранить</button><button class="secondary" id="source-remove">Убрать из списка</button><p id="source-error" role="alert"></p></section></div></dialog>

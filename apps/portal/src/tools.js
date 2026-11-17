@@ -16,6 +16,7 @@ export async function loadTools() {
     tools.push({
       id: tool.id,
       title: tool.title,
+      url: url.href,
       embed: Boolean(tool.embed) && url.origin === location.origin
     })
   }

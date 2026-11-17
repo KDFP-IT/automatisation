@@ -2,24 +2,26 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import KacAssemble from '../../../packages/kac-ui/src/KacAssemble.vue'
+import SignaturesCheck from './SignaturesCheck.vue'
+import BookmarksCheck from './BookmarksCheck.vue'
+import ToolsCatalog from './ToolsCatalog.vue'
 
 const props = defineProps({ tools: { type: Array, required: true } })
 
 const route = useRoute()
 const router = useRouter()
 const mounted = ref(new Set())
-
-const native = { kac: true }
+const native = { kac: KacAssemble, signatures: SignaturesCheck, bookmarks: BookmarksCheck }
 
 const active = computed(() =>
-  props.tools.find(tool => tool.id === route.params.tool) ?? props.tools[0])
+  props.tools.find(tool => tool.id === route.params.tool))
 
 watch(active, tool => {
   if (tool && route.params.tool !== tool.id) router.replace('/' + tool.id)
 }, { immediate: true })
 
 watch(active, tool => {
-  if (tool && !native[tool.id]) mounted.value.add(tool.id)
+  if (tool) mounted.value.add(tool.id)
 }, { immediate: true })
 
 function source(tool) {
@@ -30,18 +32,52 @@ function source(tool) {
 </script>
 
 <template>
-  <template v-if="active">
-    <KacAssemble v-if="native[active.id]" :key="active.id" />
-    <template v-else>
-      <template v-for="tool in tools.filter(tool => !native[tool.id])" :key="tool.id">
+  <div class="tool-pages relative flex min-h-0 flex-1 flex-col">
+    <Transition name="page" appear>
+      <div v-show="!active" class="tool-page">
+        <ToolsCatalog :tools="tools" />
+      </div>
+    </Transition>
+    <template v-for="tool in tools" :key="tool.id">
+      <Transition v-if="mounted.has(tool.id)" name="page" appear>
+        <div v-show="active?.id === tool.id" class="tool-page">
+        <component v-if="native[tool.id]" :is="native[tool.id]" />
         <iframe
-          v-if="mounted.has(tool.id)"
-          v-show="active.id === tool.id"
+          v-else
           :src="source(tool)"
           :title="tool.title"
-          class="block h-full w-full border-0"
+          class="block min-h-[calc(100dvh-80px)] w-full flex-1 border-0"
         />
-      </template>
+        </div>
+      </Transition>
     </template>
-  </template>
+  </div>
 </template>
+
+<style>
+.tool-page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.page-enter-active {
+  transition: opacity 240ms ease-out 100ms;
+}
+.page-leave-active {
+  position: absolute;
+  inset: 0 0 auto;
+  pointer-events: none;
+  transition: opacity 100ms ease-in;
+}
+.page-enter-from,
+.page-leave-to {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-enter-active,
+  .page-leave-active {
+    transition: none;
+  }
+}
+</style>

@@ -2,3 +2,21 @@
 [data-embedded] #workspace > .topbar { display: none; }
 [data-embedded] .intro .eyebrow { display: none; }
 [data-embedded] #workspace { margin-left: 0; }
+/* Portal design system: visual-only treatment of embedded tools. */
+[data-embedded] body { font-family:Manrope,Arial,sans-serif; background:#f4f4f5; color:#27272a; }
+[data-embedded] button,[data-embedded] input,[data-embedded] select,[data-embedded] textarea { font:inherit; }
+[data-embedded] button { border-radius:8px; box-shadow:none; font-size:14px; font-weight:500; line-height:1.5; transition:background .15s; }
+[data-embedded] button:focus-visible,[data-embedded] input:focus-visible,[data-embedded] select:focus-visible { outline:2px solid #a44810; outline-offset:2px; }
+[data-embedded] button:disabled { cursor:default; opacity:.5; }
+[data-embedded] input:not([type=checkbox]):not([type=range]),[data-embedded] select,[data-embedded] textarea { border:1px solid #d4d4d8; border-radius:7px; background:white; color:#27272a; padding:8px 10px; }
+[data-embedded] input[type=checkbox] { accent-color:#a44810; }
+[data-embedded] .panel,[data-embedded] .work-card,[data-embedded] .info-card,[data-embedded] .result-card { background:white; border:1px solid #e4e4e7; border-radius:12px; box-shadow:none; }
+[data-embedded] .primary-button { background:#a44810; color:white; border:0; padding:12px 18px; }
+[data-embedded] .primary-button:hover:not(:disabled) { background:#87390d; }
+[data-embedded] .primary-button:disabled { background:#aeb4b7; opacity:1; }
+[data-embedded] .choose-button { border:1px solid #d4d4d8; background:white; color:#27272a; padding:10px 16px; }
+[data-embedded] h1 { font-size:36px; line-height:1.2; font-weight:700; letter-spacing:-.035em; }
+[data-embedded] .intro h1 br { display:none; }
+[data-embedded] .intro h1 span { color:#18181b; }
+[data-embedded] .document-art { display:none; }
+[data-embedded] .dropzone { border:2px dashed #d4d4d8; border-radius:12px; background:white; }

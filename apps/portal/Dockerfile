@@ -6,6 +6,7 @@ COPY apps/portal/index.html apps/portal/vite.config.mjs ./apps/portal/
 COPY apps/portal/src ./apps/portal/src
 COPY apps/portal/public ./apps/portal/public
 COPY packages/kac-ui ./packages/kac-ui
+COPY apps/signatures/dist/style.css ./apps/signatures/dist/style.css
 RUN npm run build --prefix apps/portal
 
 FROM nginx:stable-alpine
