@@ -1,7 +1,7 @@
 import {decodeCms,extractExpected,matchPeople,parseName,checkDigest,correctExpected,includeHandwriting,restoreHandwriting} from './core.mjs';
 import {pageLines,inkEvidence} from './layout.mjs';
 import {digestHex} from './vendor/hash.mjs';
-const $=id=>document.getElementById(id);
+const $=id=>(document.querySelector('.signatures-native')||document).querySelector(`[id="${id}"]`);
 const state={files:[],expected:[],signers:[],rows:[],filter:'all',pdf:null,pdfBytes:null,pages:[],errors:[],mode:'actual',name:'',busy:false,checked:false,run:0};
 const labels={found:'Найдена',missing:'Не найдена',review:'Уточнить'};
 function el(tag,text,cls){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e;}
@@ -59,7 +59,7 @@ $('analyze').onclick=async()=>{
     const errors=[],signers=[];
     const sigs=state.files.filter(f=>!/\.pdf$/i.test(f.name));
     for(const file of sigs){$('progress').textContent=`Читаем ${file.name}…`;try{const cms=decodeCms(new Uint8Array(await file.arrayBuffer()),file.name);if(!cms.detached){errors.push(`${file.name}: присоединённая подпись не сопоставляется с отдельным PDF.`);continue;}for(const s of cms.signers){s.binding=await checkDigest(s,bytes);if(!s.identified)errors.push(`${file.name}: для записи №${s.index} отсутствует сертификат подписанта.`);if(s.binding.status==='mismatch')errors.push(`${file.name}: хеш подписи не соответствует PDF.`);signers.push(s);}}catch(e){errors.push(`${file.name}: ${e.message}`);}}
-    const response=await fetch('./vendor/names.json');if(!response.ok)throw Error('Не удалось загрузить словарь фамилий. Повторите проверку.');
+    const response=await fetch(new URL('./vendor/names.json',import.meta.url));if(!response.ok)throw Error('Не удалось загрузить словарь фамилий. Повторите проверку.');
     const expected=extractExpected(lines,await response.json());
     if(state.fingerprint===fingerprint)restoreHandwriting(expected,state.expected);
     if(!expected.length)errors.push('Фамилии автоматически не найдены. Проверьте страницы PDF и внесите список вручную. Для сканов требуется предварительное OCR.');
@@ -110,7 +110,7 @@ function render(){
     else if(row.matches?.length&&row.sigExcludedFromDrawings){match.append(el('small','SIG не применяется к чертежам'));any=true;}
     for(const [kind,label] of [['present','Рукописная'],['candidates','Проверить росчерк']]){const pages=[...new Set(row.handwriting[kind].map(s=>s.page))];if(pages.length){match.append(el('small',`${label} · стр. ${pagesLabel(pages)}`));any=true;}}
     if(!any)match.append(el('span','—'));
-    const details=el('details',undefined,'row-details');details.append(el('summary','Подробнее'),el('p',row.reason));for(const n of new Set((row.matches||[]).map(s=>s.name)))details.append(el('p',`SIG: ${n}`));match.append(details);
+    const details=el('div',undefined,'row-details');details.append(el('p',row.reason));for(const n of new Set((row.matches||[]).map(s=>s.name)))details.append(el('p',`SIG: ${n}`));match.append(details);
     const status=el('td');status.append(el('span',row.evidenceType==='partial'?'Частично':row.evidenceType==='candidate'?'Росчерк?':row.evidenceType==='handwritten'?'Рукописная':row.evidenceType==='combined'?'ЭП + рукописная':row.evidenceType==='electronic'?'ЭП':labels[row.status],`badge ${row.status}`));tr.append(name,match,status);tbody.append(tr);
   }
   $('table-footer').hidden=!state.pdf;
