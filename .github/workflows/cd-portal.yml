@@ -3,7 +3,9 @@ name: CD portal (VPS)
 # Deploy the portal stack on the LAN VPS after merge to main.
 # Runs on the self-hosted runner living on the VPS itself
 # (github.com cannot reach 192.168.x), operates directly on
-# ~/automatisation so compose volumes/.env stay untouched.
+# the nikita_g checkout so compose volumes/.env stay untouched.
+# NOTE: the runner container runs as root, hence HOME pinning,
+# safe.directory and .git ownership repair in the sync step.
 
 on:
   push:
@@ -26,11 +28,14 @@ jobs:
   deploy:
     runs-on: [self-hosted, portal]
     timeout-minutes: 25
+    env:
+      HOME: /home/nikita_g
     steps:
       - name: Sync working tree to pushed commit
         run: |
           set -euo pipefail
           cd ~/automatisation
+          git config --global --add safe.directory ~/automatisation
           # Never wipe a manual hotfix: fail loudly instead.
           if [ -n "$(git status --porcelain -- apps deploy packages)" ]; then
             git status --short -- apps deploy packages
@@ -39,6 +44,7 @@ jobs:
           fi
           git fetch origin main
           git reset --hard "$GITHUB_SHA"
+          chown -R "$(stat -c %u:%g ~/automatisation)" ~/automatisation/.git
           git log --oneline -1
 
       - name: Rebuild portal images (keep :prev for rollback)
@@ -80,5 +86,6 @@ jobs:
           # trench serves its own health from inside
           docker exec portal-trench-1 python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/trench/api/health', timeout=5)"
 
-      # Rollback (manual): for svc in ...; do docker tag kdfp-portal-$svc:prev kdfp-portal-$svc:local; done
-      # then compose up -d again in ~/automatisation/deploy/portal.
+      # Rollback (manual): for svc in auth audit kac bookmarks signatures trench shell; do
+      #   docker tag "kdfp-portal-$svc:prev" "kdfp-portal-$svc:local"
+      # done, then compose up -d again in ~/automatisation/deploy/portal.
