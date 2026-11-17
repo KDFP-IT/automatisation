@@ -1,0 +1,84 @@
+name: CD portal (VPS)
+
+# Deploy the portal stack on the LAN VPS after merge to main.
+# Runs on the self-hosted runner living on the VPS itself
+# (github.com cannot reach 192.168.x), operates directly on
+# ~/automatisation so compose volumes/.env stay untouched.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/**'
+      - 'deploy/portal/**'
+      - 'packages/**'
+      - '.github/workflows/cd-portal.yml'
+  workflow_dispatch: {}
+
+concurrency:
+  group: portal-cd
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, portal]
+    timeout-minutes: 25
+    steps:
+      - name: Sync working tree to pushed commit
+        run: |
+          set -euo pipefail
+          cd ~/automatisation
+          # Never wipe a manual hotfix: fail loudly instead.
+          if [ -n "$(git status --porcelain -- apps deploy packages)" ]; then
+            git status --short -- apps deploy packages
+            echo "ERROR: dirty working tree, refusing to deploy" >&2
+            exit 1
+          fi
+          git fetch origin main
+          git reset --hard "$GITHUB_SHA"
+          git log --oneline -1
+
+      - name: Rebuild portal images (keep :prev for rollback)
+        run: |
+          set -euo pipefail
+          cd ~/automatisation
+          for svc in auth audit kac bookmarks signatures trench shell; do
+            docker tag "kdfp-portal-$svc:local" "kdfp-portal-$svc:prev" 2>/dev/null || true
+          done
+          docker build -t kdfp-portal-auth:local -f apps/auth/Dockerfile .
+          docker build -t kdfp-portal-audit:local -f apps/audit/Dockerfile .
+          docker build -t kdfp-portal-kac:local -f apps/kac/Dockerfile .
+          docker build -t kdfp-portal-bookmarks:local apps/bookmarks
+          docker build -t kdfp-portal-signatures:local apps/signatures
+          docker build -f apps/trench/Dockerfile.portal -t kdfp-portal-trench:local apps/trench
+          docker build -t kdfp-portal-shell:local -f apps/portal/Dockerfile .
+
+      - name: Restart stack
+        run: |
+          set -euo pipefail
+          cd ~/automatisation/deploy/portal
+          docker compose -f compose.yaml -f compose.kac-linux.yaml up -d
+          sleep 15
+          docker ps --format '{{.Names}} {{.Status}}' | grep '^portal-'
+
+      - name: Health gate
+        run: |
+          set -euo pipefail
+          PORT="$(cd ~/automatisation/deploy/portal && docker compose -f compose.yaml -f compose.kac-linux.yaml port portal 8090)"
+          BASE="http://${PORT:-192.168.30.183:8090}"
+          test "$(curl -fsS "$BASE/api/health")" = '{"service":"automation-portal","status":"ok"}'
+          # gated tools must answer 401 anonymously (nginx auth_request alive)
+          test "$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/kac/api/health")" = "401"
+          # no container may be crash-looping
+          if docker ps --format '{{.Names}} {{.Status}}' | grep '^portal-' | grep -i 'restarting\|exited\|dead'; then
+            echo "ERROR: portal container unhealthy" >&2
+            exit 1
+          fi
+          # trench serves its own health from inside
+          docker exec portal-trench-1 python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/trench/api/health', timeout=5)"
+
+      # Rollback (manual): for svc in ...; do docker tag kdfp-portal-$svc:prev kdfp-portal-$svc:local; done
+      # then compose up -d again in ~/automatisation/deploy/portal.
