@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 const error = ref('')
 onMounted(async () => {
+  for (const id of ['analyze', 'export']) document.querySelector(`.signatures-native #${id}`).disabled = true
   try { await import(/* @vite-ignore */ '/signatures/app.mjs') }
   catch (e) { error.value = 'Не удалось загрузить проверку: ' + e.message }
 })
@@ -19,7 +20,7 @@ onMounted(async () => {
   <ul id="file-list" class="file-list" aria-label="Выбранные файлы"></ul>
   <UButton id="add-files" class="secondary add-files" type="button" color="neutral" variant="outline">＋ &nbsp;Добавить PDF или SIG</UButton>
   <details class="options"><summary>Параметры</summary><div class="settings"><label for="scope">Страницы</label><select id="scope"><option value="all">Весь документ</option><option value="first">Диапазон страниц</option></select><label for="page-start" id="page-start-label" hidden>Начать со страницы</label><input id="page-start" type="number" min="1" value="1" hidden><label for="page-count" id="page-label" hidden>Число страниц</label><input id="page-count" type="number" min="1" max="200" value="3" hidden><label class="handwriting-setting"><input id="handwriting-check" type="checkbox" checked> Проверять рукописные на чертежах</label></div></details>
-  <UButton id="analyze" class="primary" type="button" disabled color="neutral" variant="outline"><span>Проверить подписантов</span><span>↗</span></UButton>
+  <UButton id="analyze" class="primary" type="button" color="neutral" variant="outline"><span>Проверить подписантов</span><span>↗</span></UButton>
   <p class="process" id="progress" role="status" aria-live="polite"></p><div class="error" id="upload-error" role="alert" hidden></div>
  </section>
  <section class="panel results" aria-labelledby="result-title">
@@ -28,7 +29,7 @@ onMounted(async () => {
   <div class="error list-notice" id="list-notice" role="alert" hidden></div>
   <div class="table-wrap"><table><thead><tr><th scope="col">Фамилия / ФИО</th><th scope="col">Подписи</th><th scope="col">Результат</th></tr></thead><tbody id="people"></tbody></table></div>
   <div class="table-empty" id="table-empty"><span class="empty-result-icon" aria-hidden="true"><svg viewBox="0 0 64 64" class="file-icon"><path d="M17 5h22l13 13v41H17z"/><path d="M39 5v14h13M24 45c3-7 5-9 7-5 2 5 4 4 8-4"/></svg></span><strong>Результаты появятся после обработки</strong><span>Загрузите PDF и запустите проверку</span></div>
-  <div class="table-footer" id="table-footer" hidden><span id="page-source"></span><div class="footer-links"><UButton class="text-button" id="export" disabled color="neutral" variant="outline">Скачать CSV ↓</UButton><span class="footer-separator">|</span><UButton class="text-button" id="preview-button" hidden color="neutral" variant="outline">Открыть PDF ↗</UButton></div></div>
+  <div class="table-footer" id="table-footer" hidden><span id="page-source"></span><div class="footer-links"><UButton class="text-button" id="export" color="neutral" variant="outline">Скачать CSV ↓</UButton><span class="footer-separator">|</span><UButton class="text-button" id="preview-button" hidden color="neutral" variant="outline">Открыть PDF ↗</UButton></div></div>
  </section>
  </div>
  <div class="workspace-footer"><p>ⓘ&nbsp; <span id="footer-hint">Добавьте PDF для начала проверки</span></p></div>
@@ -85,6 +86,7 @@ onMounted(async () => {
 .file-list :deep(li>button) { display:flex; align-items:center; justify-content:center; flex:0 0 34px; width:34px; height:34px; padding:0; border:1px solid var(--ui-border); border-radius:8px; background:var(--ui-bg-muted); color:var(--ui-text-muted); font-size:24px; line-height:1; cursor:pointer; }
 .file-list :deep(li>button:hover:not(:disabled)) { background:#fee2e2; border-color:#fca5a5; color:#b91c1c; }
 #report-filename { display:none!important; }
+dialog { position:fixed; inset:0; margin:auto; max-width:calc(100vw - 32px); max-height:calc(100dvh - 32px); overflow:auto; }
 .results .table-footer { color:var(--ui-text-muted); font-size:14px; }
 .results .table-footer :deep(#export),.results .table-footer :deep(#preview-button) { display:inline-flex; align-items:center; justify-content:center; gap:8px; align-self:flex-start; height:40px; min-height:40px; padding:8px 14px; border:1px solid var(--ui-border-accented); border-radius:8px; background:var(--ui-bg); color:var(--ui-text); font-size:14px; font-weight:600; line-height:1.4; text-decoration:none; box-shadow:none; }
 .results .table-footer :deep(#export:hover:not(:disabled)),.results .table-footer :deep(#preview-button:hover:not(:disabled)) { background:var(--ui-bg-muted); color:var(--ui-primary); }
