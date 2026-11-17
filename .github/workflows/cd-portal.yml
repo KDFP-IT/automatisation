@@ -37,8 +37,9 @@ jobs:
           cd ~/automatisation
           git config --global --add safe.directory ~/automatisation
           # Never wipe a manual hotfix: fail loudly instead.
-          if [ -n "$(git status --porcelain -- apps deploy packages)" ]; then
-            git status --short -- apps deploy packages
+          # (untracked host-specific files like compose.vps.yaml are OK)
+          if [ -n "$(git status --porcelain --untracked-files=no -- apps deploy packages)" ]; then
+            git status --short --untracked-files=no -- apps deploy packages
             echo "ERROR: dirty working tree, refusing to deploy" >&2
             exit 1
           fi
