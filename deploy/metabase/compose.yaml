@@ -1,0 +1,15 @@
+services:
+  metabase:
+    image: metabase/metabase:v0.65.3
+    # No cap_drop/no-new-privileges: the image entrypoint starts as root and
+    # drops to the metabase user itself; stripping caps breaks that (su fails).
+    env_file:
+      - .env
+    ports:
+      - "${METABASE_BIND:-127.0.0.1}:${METABASE_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health | grep -q '\"status\":\"ok\"'"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 3m

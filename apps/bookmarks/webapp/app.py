@@ -14,11 +14,29 @@ import subprocess
 import sys
 import threading
 import time
-
+from urllib.request import Request, urlopen
 from flask import Flask, jsonify, request, send_file, session
 from werkzeug.exceptions import HTTPException
 
 ROOT = Path(__file__).resolve().parent
+
+
+
+
+AUDIT_URL = os.environ.get("AUDIT_URL", "http://audit:8080")
+
+
+def audit_event(action, user, logger, **fields):
+    """Fire-and-forget audit event; never breaks the request on failure."""
+    if not user:
+        return
+    try:
+        payload = json.dumps({"tool": "bookmarks", "action": action, "user": user, **fields}).encode()
+        urlopen(Request(AUDIT_URL + "/audit/event", data=payload,
+                        headers={"Content-Type": "application/json"}, method="POST"),
+                timeout=2).close()
+    except Exception:
+        logger.exception("Bookmarks audit event %s lost", action)
 
 
 def create_app(config=None):
@@ -41,7 +59,6 @@ def create_app(config=None):
     pool = ThreadPoolExecutor(max_workers=app.config["WORKERS"], thread_name_prefix="pdf-job")
     stop = threading.Event()
     app.extensions["pdf_jobs"] = {"jobs": jobs, "pool": pool, "stop": stop, "root": job_root}
-
     def purge():
         with lock:
             expired = [key for key, job in jobs.items()
@@ -94,6 +111,15 @@ def create_app(config=None):
                     app.logger.exception("Failed to remove temporary PDF job input")
             with lock:
                 jobs[key].update(status=status, result=details, finished=time.time())
+                info = dict(jobs[key])
+            audit_event("process", info.get("audit_user"), app.logger,
+                        user_name=info.get("audit_name"),
+                        status=status, pages=details.get("pages"), duration_ms=int(
+                            (time.time() - info.get("started", time.time())) * 1000),
+                        error=details.get("error"),
+                        details={"added": details.get("added"),
+                                 "allow_incomplete": details.get("allow_incomplete"),
+                                 "warnings": details.get("warnings")})
 
     @app.before_request
     def session_and_origin():
@@ -157,7 +183,10 @@ def create_app(config=None):
             key = secrets.token_hex(24)
             filename = file.filename.replace("\\", "/").split("/")[-1]
             filename = "".join(char for char in filename if ord(char) >= 32)[:180] or "document.pdf"
-            jobs[key] = {"owner": session["owner"], "filename": filename, "status": "uploading"}
+            jobs[key] = {"owner": session["owner"], "filename": filename, "status": "uploading",
+                         "audit_user": request.headers.get("X-Auth-User", ""),
+                         "audit_name": request.headers.get("X-Auth-Name", ""),
+                         "started": time.time()}
         folder = job_root / key
         try:
             folder.mkdir()
@@ -197,6 +226,9 @@ def create_app(config=None):
         job = owned_job(key)
         if not job or job["status"] != "done" or kind not in {"pdf", "csv"}:
             return jsonify(error="Файл недоступен. Загрузите PDF заново."), 404
+        audit_event("download", job.get("audit_user") or request.headers.get("X-Auth-User", ""),
+                    app.logger, user_name=job.get("audit_name") or request.headers.get("X-Auth-Name", ""),
+                    details={"kind": kind})
         path = job_root / key / ("result.pdf" if kind == "pdf" else "bookmarks.csv")
         stem = Path(job["filename"]).stem
         name = f"{stem}_с_закладками.pdf" if kind == "pdf" else f"{stem}_закладки.csv"
