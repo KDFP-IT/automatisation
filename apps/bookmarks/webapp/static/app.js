@@ -1,5 +1,5 @@
 "use strict";
-const $ = (id) => document.getElementById(id);
+const $ = (id) => (document.querySelector('.bookmarks-native') || document).querySelector(`[id="${id}"]`);
 const form = $("upload-form");
 let selected = null;
 let busy = false;
@@ -78,8 +78,8 @@ function showResult(data) {
   steps(3);
   $("result-summary").textContent = `${data.filename} · ${data.pages} стр. PDF · Добавлено закладок: ${data.added}`;
   $("bookmark-count").textContent = data.added;
-  $("download-pdf").href = `./api/jobs/${encodeURIComponent(data.id)}/download/pdf`;
-  $("download-csv").href = `./api/jobs/${encodeURIComponent(data.id)}/download/csv`;
+  $("download-pdf").href = `/bookmarks/api/jobs/${encodeURIComponent(data.id)}/download/pdf`;
+  $("download-csv").href = `/bookmarks/api/jobs/${encodeURIComponent(data.id)}/download/csv`;
   $("warnings").hidden = !data.warnings.length;
   $("warnings").textContent = data.warnings.join("\n");
   const rows = document.createDocumentFragment();
@@ -103,7 +103,7 @@ async function responseJson(response) {
 async function poll(id) {
   if (id !== activeId) return;
   try {
-    const response = await fetch(`./api/jobs/${encodeURIComponent(id)}`, {cache: "no-store"});
+    const response = await fetch(`/bookmarks/api/jobs/${encodeURIComponent(id)}`, {cache: "no-store"});
     const data = await responseJson(response);
     if (!response.ok) throw new Error(data.error);
     message("");
@@ -142,7 +142,7 @@ form.addEventListener("submit", async (event) => {
   $("processing-title").textContent = "Загружаем PDF на сервер";
   $("processing-text").textContent = "Оставьте страницу открытой до завершения загрузки.";
   try {
-    const response = await fetch("./api/jobs", {method: "POST", body: payload, headers: {"X-PDF-Service": "1"}});
+    const response = await fetch("/bookmarks/api/jobs", {method: "POST", body: payload, headers: {"X-PDF-Service": "1"}});
     const data = await responseJson(response);
     if (!response.ok) throw new Error(data.error);
     activeId = data.id;
