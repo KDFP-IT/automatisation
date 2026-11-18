@@ -11,6 +11,13 @@ class CatalogueTest(unittest.TestCase):
  def tearDown(self):self.tmp.cleanup()
  def project(self,title='Кулько'):
   r=self.client.post('/api/projects',json={'name':title});self.assertEqual(r.status_code,201);return r.json
+ def test_same_origin_with_port_can_create_project(self):
+  response=self.client.post('/api/projects',base_url='http://portal.example:8090',headers={'Origin':'http://portal.example:8090'},json={'name':'Проверка Origin'})
+  self.assertEqual(response.status_code,201,response.json)
+ def test_foreign_origin_cannot_create_project(self):
+  response=self.client.post('/api/projects',base_url='http://portal.example:8090',headers={'Origin':'http://other.example:8090'},json={'name':'Чужой запрос'})
+  self.assertEqual(response.status_code,403,response.json)
+  self.assertEqual(self.client.get('/api/projects').json['projects'],[])
  def scheme(self,pid):
   r=self.client.post('/api/projects/'+pid+'/schemes',json={'model':MODEL,'name':'Д13 — Д13′'});self.assertEqual(r.status_code,201,r.json);return r.json
  def test_v4_node_fields_roundtrip_and_physical_counts(self):
