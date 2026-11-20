@@ -5,7 +5,7 @@ SELECT tool,
        COUNT(*) AS events,
        error
 FROM events
-WHERE ts >= {{start}} AND ts < {{end}}
+WHERE (details IS NULL OR details NOT LIKE '%mock%') AND ts >= {{start}} AND ts < {{end}}
   AND (status != 'ok' OR error IS NOT NULL)
 GROUP BY tool, action, status, error
 ORDER BY events DESC

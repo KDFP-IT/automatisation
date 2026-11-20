@@ -109,6 +109,45 @@ def block_runs(block):
     return runs
 
 
+def empty_offer_block(block):
+    """Only accept empty paragraphs, never text, drawings or other content."""
+    if block is None or block.tag != qname("w", "p"):
+        return False
+    for child in block:
+        if child.tag == qname("w", "pPr"):
+            continue
+        if child.tag != qname("w", "r"):
+            return False
+        for item in child:
+            if item.tag == qname("w", "rPr"):
+                continue
+            if item.tag != qname("w", "t") or (item.text or "").strip():
+                return False
+    return True
+
+
+def populate_empty_block(block):
+    for child in list(block):
+        if child.tag == qname("w", "r"):
+            block.remove(child)
+    run = xml.fromstring(
+        '<w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
+        'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" '
+        'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
+        'xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+        '<w:drawing><wp:inline><wp:extent cx="6120000" cy="7920000"/>'
+        '<wp:docPr id="1" name="KAC template"/>'
+        '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+        '<pic:pic><pic:nvPicPr><pic:cNvPr id="0" name="KAC"/><pic:cNvPicPr/></pic:nvPicPr>'
+        '<pic:blipFill><a:blip/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>'
+        '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="6120000" cy="7920000"/></a:xfrm>'
+        '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>'
+        '</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>'
+    )
+    block.append(run)
+    return [run]
+
+
 def new_divider(template, section, title):
     divider = deepcopy(template)
     run = deepcopy(divider.find("w:r", NS))
@@ -144,7 +183,8 @@ def prepare_layout(document, titles, single):
         if divider is next(iter(dividers.values())):
             continue_duplicate_numbering(divider)
         block = divider.getnext()
-        return {number: (block, block_runs(block))}
+        runs = populate_empty_block(block) if empty_offer_block(block) else block_runs(block)
+        return {number: (block, runs)}
     if not dividers:
         raise ValueError("В Word нужен хотя бы один оформленный разделитель прайс-листов.")
     missing = sorted(dividers.keys() - titles.keys())
@@ -162,8 +202,11 @@ def prepare_layout(document, titles, single):
     initial_numbering = deepcopy(first_section.find("w:pgNumType", NS))
     template_block = first.getnext()
     existing_runs = {}
+    empty = [number for number, (_, block) in pairs.items() if empty_offer_block(block)]
+    if empty and len(empty) != len(pairs):
+        raise ValueError("Пустые блоки КП нельзя смешивать с оформленными блоками.")
     for number, (divider, block) in pairs.items():
-        existing_runs[number] = block_runs(block)
+        existing_runs[number] = populate_empty_block(block) if empty else block_runs(block)
         body.remove(divider)
         body.remove(block)
 
