@@ -5,6 +5,6 @@ SELECT tool,
        COUNT(DISTINCT user_id) AS users,
        ROUND(SUM(saved_minutes) / 60.0, 2) AS saved_hours
 FROM events
-WHERE ts >= {{start}} AND ts < {{end}}
+WHERE (details IS NULL OR details NOT LIKE '%mock%') AND ts >= {{start}} AND ts < {{end}}
 GROUP BY tool
 ORDER BY saved_hours DESC;
