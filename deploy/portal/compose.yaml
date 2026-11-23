@@ -64,6 +64,8 @@ services:
       ROUTER_BASE_URL: "${ROUTER_BASE_URL:-https://routerai.ru/api/v1}"
       ROUTER_API_KEY: "${ROUTER_API_KEY:-}"
       AUDIT_URL: "http://audit:8080"
+      HF_HUB_CACHE: "/data/hf-cache"
+      HF_HOME: "/data/hf-home"
     volumes:
       - gesn-data:/data
   norms-db:
