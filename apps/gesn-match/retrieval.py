@@ -27,7 +27,7 @@ trgm AS (
          ROW_NUMBER() OVER (ORDER BY GREATEST(word_similarity(q.raw, n.code), word_similarity(q.raw, n.title)) DESC) AS rnk
   FROM norms n, q
   WHERE n.collection = %(collection)s AND n.edition_id = %(edition_id)s
-    AND (n.code %> q.raw OR n.title %> q.raw)
+    AND (n.code %%> q.raw OR n.title %%> q.raw)
 ),
 vec AS (
   SELECT n.code,
