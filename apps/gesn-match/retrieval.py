@@ -1,0 +1,83 @@
+"""Hybrid candidate retrieval: FTS (russian) + pg_trgm + pgvector.
+
+Weights are module constants; calibrate on the pilot (step 6 of the plan),
+no learned ranker in MVP.
+"""
+from __future__ import annotations
+
+FTS_W = 0.35
+TRGM_W = 0.25
+VEC_W = 0.40
+
+CANDIDATE_SQL = """
+WITH q AS (
+  SELECT plainto_tsquery('russian', %(text)s) AS tsq,
+         %(text)s AS raw,
+         %(embedding)s::vector AS emb
+),
+fts AS (
+  SELECT n.code,
+         ts_rank(n.search_tsv, q.tsq) AS fts_score
+  FROM norms n, q
+  WHERE n.collection = %(collection)s AND n.edition_id = %(edition_id)s
+    AND n.search_tsv @@ q.tsq
+),
+trgm AS (
+  SELECT n.code,
+         GREATEST(similarity(n.code, q.raw), similarity(n.title, q.raw)) AS trgm_score
+  FROM norms n, q
+  WHERE n.collection = %(collection)s AND n.edition_id = %(edition_id)s
+    AND (n.code %% q.raw OR n.title %% q.raw)
+),
+vec AS (
+  SELECT n.code,
+         1 - (e.embedding <=> q.emb) AS vec_score
+  FROM norms n
+  JOIN norm_embeddings e ON e.norm_code = n.code, q
+  WHERE n.collection = %(collection)s AND n.edition_id = %(edition_id)s
+  ORDER BY e.embedding <=> q.emb
+  LIMIT %(vec_prefetch)s
+)
+SELECT n.code, n.title, n.unit, n.work_composition, n.table_code,
+       n.source_ref, n.needs_review,
+       COALESCE(f.fts_score, 0) AS fts_score,
+       COALESCE(t.trgm_score, 0) AS trgm_score,
+       COALESCE(v.vec_score, 0) AS vec_score,
+       (COALESCE(f.fts_score, 0) * %(fts_w)s
+        + COALESCE(t.trgm_score, 0) * %(trgm_w)s
+        + COALESCE(v.vec_score, 0) * %(vec_w)s) AS score
+FROM norms n
+LEFT JOIN fts f ON f.code = n.code
+LEFT JOIN trgm t ON t.code = n.code
+LEFT JOIN vec v ON v.code = n.code, q
+WHERE n.collection = %(collection)s AND n.edition_id = %(edition_id)s
+  AND (f.code IS NOT NULL OR t.code IS NOT NULL OR v.code IS NOT NULL)
+ORDER BY score DESC
+LIMIT %(limit)s
+"""
+
+
+def search_candidates(con, vor_text: str, embedding: list[float],
+                      collection: str, edition_id: str,
+                      limit: int = 30) -> list[dict]:
+    """Return up to `limit` candidates; [] when nothing matches (not an error)."""
+    text = (vor_text or "").strip()
+    if not text:
+        return []
+
+    cur = con.execute(
+        CANDIDATE_SQL,
+        {
+            "text": text,
+            "embedding": embedding,
+            "collection": collection,
+            "edition_id": edition_id,
+            "limit": limit,
+            "vec_prefetch": max(limit * 4, 100),
+            "fts_w": FTS_W,
+            "trgm_w": TRGM_W,
+            "vec_w": VEC_W,
+        },
+    )
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, row)) for row in cur.fetchall()]

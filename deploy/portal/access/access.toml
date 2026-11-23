@@ -16,3 +16,6 @@ groups = ["CN=KDFP-Trench,OU=KDFP,DC=kdfp,DC=ru"]
 
 [tools.kac]
 groups = ["CN=KDFP-KAC,OU=KDFP,DC=kdfp,DC=ru"]
+
+[tools.gesn-match]
+groups = ["CN=KDFP-GESN,OU=KDFP,DC=kdfp,DC=ru"]

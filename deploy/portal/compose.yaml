@@ -55,13 +55,30 @@ services:
       LOCAL_PASSWORD: "${LOCAL_PASSWORD:-}"
     volumes:
       - ./access:/etc/auth:ro
-  audit:
+  gesn-match:
     <<: *service
-    image: ${AUDIT_IMAGE:-kdfp-portal-audit:1.0.0}
+    image: ${GESN_MATCH_IMAGE:-kdfp-portal-gesn-match:1.0.0}
+    environment:
+      NORMS_DSN: "${NORMS_DSN:-}"
+      GESN_TOKEN: "${GESN_TOKEN:-}"
+      ROUTER_BASE_URL: "${ROUTER_BASE_URL:-https://routerai.ru/api/v1}"
+      ROUTER_API_KEY: "${ROUTER_API_KEY:-}"
+      AUDIT_URL: "http://audit:8080"
     volumes:
-      - audit-data:/data
+      - gesn-data:/data
+  norms-db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: "${NORMS_DB_USER:-norms}"
+      POSTGRES_PASSWORD: "${NORMS_DB_PASSWORD:-}"
+      POSTGRES_DB: "${NORMS_DB_NAME:-norms}"
+    volumes:
+      - norms-data:/var/lib/postgresql/data
 
 volumes:
-  portal-data:
-  bookmarks-data:
-  audit-data:
+   portal-data:
+   bookmarks-data:
+   audit-data:
+   gesn-data:
+   norms-data:
