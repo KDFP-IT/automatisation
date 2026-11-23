@@ -227,31 +227,54 @@ def normalize_verdict(verdict: dict) -> tuple[str, str, list]:
     return status, rationale, list(missing or [])
 
 
-def llm_verify(position: dict, candidates: list[dict], profile: dict) -> list[dict]:
-    """LLM applicability check. Never invents codes: only reorders/labels input."""
-    if not ROUTER_API_KEY or not candidates:
-        for cand in candidates:
-            cand["status"] = "unverified"
-            cand["rationale"] = "Нет ключа LLM — только кандидаты поиска."
-        return candidates
+VERIFY_BATCH = 6
+VERIFY_WORKERS = 4
+MATERIAL_RE = re.compile(
+    r"ГОСТ|ТУ\s|ТУ\b|фр\.|М\s?\d{3,4}|БСТ|ЩМА|ЭБДК|РЭСФ|"
+    r"профиль\s+резиновый|соединител|электросоединени|"
+    r"смесь\s+\S*\s*по\s+ГОСТ|эмульсия",
+    re.I,
+)
+
+
+def is_material(position: dict) -> bool:
+    """Position is a material/equipment supply row, not a work: no norm applies."""
+    text = f"{position.get('name', '')} {position.get('unit', '')}"
+    return bool(MATERIAL_RE.search(text))
+
+
+def llm_verify_batch(positions: list[dict], cand_lists: list[list[dict]],
+                     profile: dict) -> list[list[dict]]:
+    """One LLM call for up to VERIFY_BATCH positions. Never invents codes."""
+    if not ROUTER_API_KEY:
+        for cands in cand_lists:
+            for cand in cands:
+                cand["status"] = "unverified"
+                cand["rationale"] = "Нет ключа LLM — только кандидаты поиска."
+        return cand_lists
     checklist = "\n".join(f"- {item}" for item in profile.get("checklist", []))
     stops = "\n".join(f"- {item}" for item in profile.get("stop_conditions", []))
-    cand_text = "\n\n".join(
-        (f"[{i}] {c.get('code')} — {c.get('title')} (ед.: {c.get('unit')})\n"
-         f"Состав работ: {'; '.join(c.get('work_composition') or [])}")[:600]
-        for i, c in enumerate(candidates)
-    )
+    blocks = []
+    for i, (pos, cands) in enumerate(zip(positions, cand_lists)):
+        cand_text = "\n".join(
+            (f"[{j}] {c.get('code')} — {c.get('title')} (ед.: {c.get('unit')})")[:300]
+            for j, c in enumerate(cands)
+        )
+        blocks.append(
+            f"Позиция {i}: {pos['name']} (ед.: {pos.get('unit')}, кол-во: {pos.get('quantity')}).\n"
+            f"Кандидаты:\n{cand_text}"
+        )
     prompt = (
-        f"Позиция ВОР: {position['name']} (ед.: {position.get('unit')}, кол-во: {position.get('quantity')}).\n"
-        f"Кандидаты из каталога ГЭСН:\n{cand_text}\n\n"
-        f"Проверь применимость каждого кандидата по критериям:\n{checklist}\n"
-        f"Стоп-условия (такой кандидат — clarify):\n{stops}\n\n"
-        "Ответь СТРОГО JSON, например: "
-        "{\"verdicts\": [{\"index\": 0, \"status\": \"clarify\", "
-        "\"rationale\": \"...\", \"missing\": [\"...\"]}]}. "
+        "Проверь применимость кандидатов к каждой позиции по критериям:\n"
+        f"{checklist}\nСтоп-условия (такой кандидат — clarify):\n{stops}\n\n"
+        + "\n\n".join(blocks) +
+        "\n\nОтветь СТРОГО JSON, например: "
+        "{\"results\": [{\"position_index\": 0, "
+        "\"verdicts\": [{\"index\": 0, \"status\": \"clarify\", "
+        "\"rationale\": \"...\", \"missing\": [\"...\"]}]}]}. "
         "Допустимые status: ok, clarify, reject. "
         "rationale — 1-2 предложения, до 300 символов. "
-        "Шифры не сочиняй, оценивай только данный список."
+        "Шифры не сочиняй, оценивай только данные списки."
     )
     body = json.dumps({
         "model": SUB_MODEL,
@@ -271,27 +294,42 @@ def llm_verify(position: dict, candidates: list[dict], profile: dict) -> list[di
                          "Authorization": f"Bearer {ROUTER_API_KEY}"},
                 method="POST",
             )
-            with urlopen(req, timeout=120) as resp:
+            with urlopen(req, timeout=180) as resp:
                 payload = json.loads(resp.read().decode("utf-8"))
             content = payload["choices"][0]["message"]["content"] or ""
             if content.strip():
                 break
-        verdicts = parse_verdicts(content, len(candidates))
-        if not verdicts:
+        data = parse_verdicts(content, 0)
+        if isinstance(data, dict) and isinstance(data.get("results"), list):
+            per_pos = {}
+            for entry in data["results"]:
+                if isinstance(entry, dict) and isinstance(entry.get("position_index"), int):
+                    per_pos[entry["position_index"]] = parse_verdicts(json.dumps(entry), 0)
+            verdicts = [per_pos.get(i, {}) for i in range(len(positions))]
+        else:
+            verdicts = [parse_verdicts(json.dumps(data), len(cands)) for cands in cand_lists]
+            if len(verdicts) == 1 and len(positions) > 1:
+                verdicts = verdicts * len(positions)
+        if not any(verdicts):
             raise ValueError(f"unparsed LLM verdict: {content[:200]}")
     except Exception as error:
         import logging
-        logging.getLogger("gesn-match").exception("LLM verify failed: %s", error)
-        for cand in candidates:
-            cand["status"] = "error_retry"
-            cand["rationale"] = "Проверка не выполнена (LLM недоступен)."
-        return candidates
-    for i, cand in enumerate(candidates):
-        status, rationale, missing = normalize_verdict(verdicts.get(i, {}))
-        cand["status"] = status
-        cand["rationale"] = rationale
-        cand["missing"] = missing
-    return candidates
+        logging.getLogger("gesn-match").exception("LLM batch verify failed: %s", error)
+        for cands in cand_lists:
+            for cand in cands:
+                cand["status"] = "error_retry"
+                cand["rationale"] = "Проверка не выполнена (LLM недоступен)."
+        return cand_lists
+    out = []
+    for cands, verdict in zip(cand_lists, verdicts):
+        for j, cand in enumerate(cands):
+            status, rationale, missing = normalize_verdict(verdict.get(j, {}))
+            cand["status"] = status
+            cand["rationale"] = rationale
+            cand["missing"] = missing
+        out.append(cands)
+    return out
+
 
 
 def write_report(rows: list[dict], path: Path):
@@ -305,6 +343,11 @@ def write_report(rows: list[dict], path: Path):
                   "Ед. нормы", "Статус", "Обоснование", "Источник (таблица)"])
     for row in rows:
         cands = row.get("candidates", [])
+        if row.get("skipped") == "material":
+            sheet.append([row["row_no"], row["name"], row.get("unit"), row.get("quantity"),
+                          "", "", "", "material",
+                          "Позиция-материал: норма не требуется, только ресурсы.", ""])
+            continue
         if not cands:
             sheet.append([row["row_no"], row["name"], row.get("unit"), row.get("quantity"),
                           "", "", "", "not_found",
@@ -355,33 +398,70 @@ def create_match_app():
         status = {"status": "error", "error": "Не удалось обработать ведомость."}
         try:
             positions = parse_vor(vor_data)
+            # Dedupe identical rows: same work is verified once.
+            uniq: dict[tuple[str, str], dict] = {}
+            order: list[tuple[str, str]] = []
+            for pos in positions:
+                dedup_key = (pos["name"].strip().lower(), (pos.get("unit") or "").strip().lower())
+                if dedup_key not in uniq:
+                    uniq[dedup_key] = pos
+                    order.append(dedup_key)
+            work = []
+            for dedup_key in order:
+                pos = uniq[dedup_key]
+                if is_material(pos):
+                    pos = {**pos, "candidates": [], "needs_clarification": False,
+                           "skipped": "material"}
+                work.append(pos)
+            with lock:
+                jobs[key].update(stage="matching", progress=0.05)
             with db() as con:
-                query_vec = embed_query  # resolved per row below
-                rows_out = []
-                total = len(positions)
-                for pos in positions:
+                # Retrieval + rerank are CPU-bound and sequential; LLM dominates anyway.
+                todo = []
+                for i, pos in enumerate(work):
                     with lock:
-                        jobs[key].update(stage="matching",
-                                         progress=0.05 + 0.9 * (pos["row_no"] - 1) / max(total, 1))
-                    vec = query_vec(f"{pos['name']} {pos.get('unit', '')}".strip())
-                    cands = search_candidates(con, f"{pos['name']} {pos.get('unit', '')}".strip(),
-                                              vec, collection, edition_id, limit=30)
-                    cands = rerank(f"{pos['name']} {pos.get('unit', '')}".strip(), cands, top_k=5)
+                        jobs[key].update(progress=0.05 + 0.45 * i / max(len(work), 1))
+                    if pos.get("skipped"):
+                        continue
+                    query = f"{pos['name']} {pos.get('unit', '')}".strip()
+                    vec = embed_query(query)
+                    cands = search_candidates(con, query, vec, collection, edition_id, limit=30)
+                    cands = rerank(query, cands, top_k=5)
                     for c in cands:
-                        with db() as con2:
-                            res = con2.execute(
-                                "SELECT res_code, res_name, quantity, res_kind FROM norm_resources "
-                                "WHERE norm_code = %s AND collection = %s AND edition_id = %s "
-                                "ORDER BY res_kind, res_code",
-                                (c["code"], collection, edition_id)).fetchall()
+                        res = con.execute(
+                            "SELECT res_code, res_name, quantity, res_kind FROM norm_resources "
+                            "WHERE norm_code = %s AND collection = %s AND edition_id = %s "
+                            "ORDER BY res_kind, res_code",
+                            (c["code"], collection, edition_id)).fetchall()
                         c["machines"] = "; ".join(
                             f"{r[1] or r[0]} ({r[2]})" for r in res if r[3] == "machine")[:500]
-                    verified = llm_verify(pos, cands[:5], profile)[:top_k]
-                    needs_clar = (not verified
-                                  or any(v.get("status") == "clarify" for v in verified)
-                                  or all(v.get("status") == "reject" for v in verified))
-                    rows_out.append({**pos, "candidates": verified,
-                                     "needs_clarification": needs_clar})
+                    todo.append((pos, cands[:5]))
+            # Batch LLM verify, up to VERIFY_WORKERS batches in parallel.
+            from concurrent.futures import ThreadPoolExecutor as _Pool
+            batches = [todo[i:i + VERIFY_BATCH] for i in range(0, len(todo), VERIFY_BATCH)]
+            with lock:
+                jobs[key].update(stage="verifying", progress=0.5)
+            with _Pool(max_workers=VERIFY_WORKERS) as pool:
+                verified_batches = list(pool.map(
+                    lambda b: llm_verify_batch([p for p, _ in b],
+                                              [c for _, c in b], profile),
+                    batches))
+            for batch, verified in zip(batches, verified_batches):
+                for (pos, _), cands in zip(batch, verified):
+                    pos["candidates"] = cands[:top_k]
+                    pos["needs_clarification"] = (
+                        not cands or any(v.get("status") == "clarify" for v in cands)
+                        or all(v.get("status") == "reject" for v in cands))
+            with lock:
+                jobs[key].update(stage="reporting", progress=0.95)
+            # Fan out back to original row order (dupes share the verdict).
+            rows_out = []
+            for pos in positions:
+                dedup_key = (pos["name"].strip().lower(), (pos.get("unit") or "").strip().lower())
+                src = uniq[dedup_key]
+                rows_out.append({**pos, "candidates": src.get("candidates", []),
+                                 "needs_clarification": src.get("needs_clarification", False),
+                                 "skipped": src.get("skipped", "")})
             write_report(rows_out, folder / "result.xlsx")
             status = {"status": "done", "rows": rows_out}
         except ValueError as error:
