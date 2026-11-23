@@ -2,7 +2,7 @@ FROM python:3.12-slim
 WORKDIR /srv/gesn-match
 COPY apps/gesn-match/requirements-deploy.txt .
 RUN pip install --no-cache-dir -r requirements-deploy.txt \
- && adduser --disabled-password --uid 1000 app && mkdir /data && chown app:app /data
+ && useradd -m -u 1000 app && mkdir -p /data && chown app:app /data
 COPY apps/gesn-match/ .
 USER app
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
