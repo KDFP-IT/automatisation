@@ -254,7 +254,10 @@ def llm_verify(position: dict, candidates: list[dict], profile: dict) -> list[di
     }).encode()
     try:
         content = ""
-        for _attempt in range(2):
+        for _attempt in range(3):
+            if _attempt:
+                import time as _time
+                _time.sleep(10)
             req = Request(
                 ROUTER_BASE_URL.rstrip("/") + "/chat/completions", data=body,
                 headers={"Content-Type": "application/json",
