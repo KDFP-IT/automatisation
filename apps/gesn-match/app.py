@@ -230,8 +230,8 @@ def llm_verify(position: dict, candidates: list[dict], profile: dict) -> list[di
     checklist = "\n".join(f"- {item}" for item in profile.get("checklist", []))
     stops = "\n".join(f"- {item}" for item in profile.get("stop_conditions", []))
     cand_text = "\n\n".join(
-        f"[{i}] {c.get('code')} — {c.get('title')} (ед.: {c.get('unit')})\n"
-        f"Состав работ: {'; '.join(c.get('work_composition') or [])}"
+        (f"[{i}] {c.get('code')} — {c.get('title')} (ед.: {c.get('unit')})\n"
+         f"Состав работ: {'; '.join(c.get('work_composition') or [])}")[:600]
         for i, c in enumerate(candidates)
     )
     prompt = (
