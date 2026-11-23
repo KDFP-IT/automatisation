@@ -456,6 +456,7 @@ def create_match_app():
                 if is_material(pos):
                     pos = {**pos, "candidates": [], "needs_clarification": False,
                            "skipped": "material"}
+                    uniq[dedup_key] = pos
                 work.append(pos)
             with lock:
                 jobs[key].update(stage="matching", progress=0.05)

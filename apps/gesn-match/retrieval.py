@@ -1,13 +1,11 @@
 """Hybrid candidate retrieval: FTS (russian) + pg_trgm + pgvector.
 
-Weights are module constants; calibrate on the pilot (step 6 of the plan),
-no learned ranker in MVP.
+Fusion is reciprocal rank fusion (RRF, k=60): scale-free, no weight
+calibration needed. Raw branch scores are kept for diagnostics.
 """
 from __future__ import annotations
 
-FTS_W = 0.35
-TRGM_W = 0.25
-VEC_W = 0.40
+RRF_K = 60
 
 CANDIDATE_SQL = """
 WITH q AS (
@@ -17,21 +15,24 @@ WITH q AS (
 ),
 fts AS (
   SELECT n.code,
-         ts_rank(n.search_tsv, q.tsq) AS fts_score
+         ts_rank(n.search_tsv, q.tsq) AS fts_score,
+         ROW_NUMBER() OVER (ORDER BY ts_rank(n.search_tsv, q.tsq) DESC) AS rnk
   FROM norms n, q
   WHERE n.collection = %(collection)s AND n.edition_id = %(edition_id)s
     AND n.search_tsv @@ q.tsq
 ),
 trgm AS (
   SELECT n.code,
-         GREATEST(similarity(n.code, q.raw), similarity(n.title, q.raw)) AS trgm_score
+         GREATEST(similarity(n.code, q.raw), similarity(n.title, q.raw)) AS trgm_score,
+         ROW_NUMBER() OVER (ORDER BY GREATEST(similarity(n.code, q.raw), similarity(n.title, q.raw)) DESC) AS rnk
   FROM norms n, q
   WHERE n.collection = %(collection)s AND n.edition_id = %(edition_id)s
     AND (n.code %% q.raw OR n.title %% q.raw)
 ),
 vec AS (
   SELECT n.code,
-         1 - (e.embedding <=> q.emb) AS vec_score
+         1 - (e.embedding <=> q.emb) AS vec_score,
+         ROW_NUMBER() OVER (ORDER BY e.embedding <=> q.emb) AS rnk
   FROM norms n
   JOIN norm_embeddings e ON e.norm_code = n.code
     AND e.collection = n.collection AND e.edition_id = n.edition_id, q
@@ -44,9 +45,9 @@ SELECT n.code, n.title, n.unit, n.work_composition, n.table_code,
        COALESCE(f.fts_score, 0) AS fts_score,
        COALESCE(t.trgm_score, 0) AS trgm_score,
        COALESCE(v.vec_score, 0) AS vec_score,
-       (COALESCE(f.fts_score, 0) * %(fts_w)s
-        + COALESCE(t.trgm_score, 0) * %(trgm_w)s
-        + COALESCE(v.vec_score, 0) * %(vec_w)s) AS score
+       (COALESCE(1.0 / (%(rrf_k)s + f.rnk), 0)
+        + COALESCE(1.0 / (%(rrf_k)s + t.rnk), 0)
+        + COALESCE(1.0 / (%(rrf_k)s + v.rnk), 0)) AS score
 FROM norms n
 LEFT JOIN fts f ON f.code = n.code
 LEFT JOIN trgm t ON t.code = n.code
@@ -75,9 +76,7 @@ def search_candidates(con, vor_text: str, embedding: list[float],
             "edition_id": edition_id,
             "limit": limit,
             "vec_prefetch": max(limit * 4, 100),
-            "fts_w": FTS_W,
-            "trgm_w": TRGM_W,
-            "vec_w": VEC_W,
+            "rrf_k": RRF_K,
         },
     )
     cols = [d[0] for d in cur.description]
