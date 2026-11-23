@@ -485,10 +485,11 @@ def create_match_app():
                         jobs[key].update(progress=0.05 + 0.45 * i / max(len(work), 1))
                     if pos.get("skipped"):
                         continue
-                    query = f"{pos['name']} {pos.get('unit', '')} {pos.get('context', '')}".strip()
-                    vec = embed_query(query)
-                    cands = search_candidates(con, query, vec, collection, edition_id, limit=30)
-                    cands = rerank(query, cands, top_k=5)
+                    lex = f"{pos['name']} {pos.get('unit', '')}".strip()
+                    sem = f"{lex} {pos.get('context', '')}".strip()
+                    vec = embed_query(sem)
+                    cands = search_candidates(con, lex, vec, collection, edition_id, limit=30)
+                    cands = rerank(lex, cands, top_k=5)
                     for c in cands:
                         res = con.execute(
                             "SELECT res_code, res_name, quantity, res_kind FROM norm_resources "
