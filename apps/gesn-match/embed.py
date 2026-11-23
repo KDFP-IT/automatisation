@@ -49,20 +49,24 @@ def backfill_embeddings(con, edition_id: str, batch: int = 256) -> int:
     done = 0
     while True:
         rows = con.execute(
-            """SELECT code, title, work_composition FROM norms
-               WHERE edition_id = %s AND code NOT IN (SELECT norm_code FROM norm_embeddings)
-               ORDER BY code LIMIT %s""",
+            """SELECT code, collection, title, work_composition FROM norms n
+               WHERE edition_id = %s AND NOT EXISTS (
+                 SELECT 1 FROM norm_embeddings e
+                 WHERE e.norm_code = n.code AND e.collection = n.collection
+                   AND e.edition_id = n.edition_id)
+               ORDER BY code, collection LIMIT %s""",
             (edition_id, batch),
         ).fetchall()
         if not rows:
             break
-        texts = [norm_text({"title": t, "work_composition": w}) for _, t, w in rows]
+        texts = [norm_text({"title": t, "work_composition": w}) for _, _, t, w in rows]
         vectors = embed_passages(texts)
-        for (code, _, _), vec in zip(rows, vectors):
+        for (code, collection, _, _), vec in zip(rows, vectors):
             con.execute(
-                """INSERT INTO norm_embeddings(norm_code, embedding)
-                   VALUES (%s, %s) ON CONFLICT (norm_code) DO NOTHING""",
-                (code, vec),
+                """INSERT INTO norm_embeddings(norm_code, collection, edition_id, embedding)
+                   VALUES (%s, %s, %s, %s)
+                   ON CONFLICT (norm_code, collection, edition_id) DO NOTHING""",
+                (code, collection, edition_id, vec),
             )
         con.commit()
         done += len(rows)

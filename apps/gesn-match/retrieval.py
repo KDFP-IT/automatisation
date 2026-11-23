@@ -33,7 +33,8 @@ vec AS (
   SELECT n.code,
          1 - (e.embedding <=> q.emb) AS vec_score
   FROM norms n
-  JOIN norm_embeddings e ON e.norm_code = n.code, q
+  JOIN norm_embeddings e ON e.norm_code = n.code
+    AND e.collection = n.collection AND e.edition_id = n.edition_id, q
   WHERE n.collection = %(collection)s AND n.edition_id = %(edition_id)s
   ORDER BY e.embedding <=> q.emb
   LIMIT %(vec_prefetch)s

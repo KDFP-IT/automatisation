@@ -280,8 +280,9 @@ def create_match_app():
                         with db() as con2:
                             res = con2.execute(
                                 "SELECT res_code, res_name, quantity, res_kind FROM norm_resources "
-                                "WHERE norm_code = %s ORDER BY res_kind, res_code",
-                                (c["code"],)).fetchall()
+                                "WHERE norm_code = %s AND collection = %s AND edition_id = %s "
+                                "ORDER BY res_kind, res_code",
+                                (c["code"], collection, edition_id)).fetchall()
                         c["machines"] = "; ".join(
                             f"{r[1] or r[0]} ({r[2]})" for r in res if r[3] == "machine")[:500]
                     verified = llm_verify(pos, cands[:5], profile)[:top_k]

@@ -139,15 +139,15 @@ VALUES (%(code)s, %(collection)s, %(table_code)s, %(title)s, %(unit)s,
   %(work_composition)s, %(tech_conditions)s, %(edition_id)s, %(source_ref)s,
   %(needs_review)s,
   to_tsvector('russian', unaccent(%(title)s || ' ' || array_to_string(%(work_composition)s::text[], ' '))))
-ON CONFLICT (code) DO UPDATE SET collection=EXCLUDED.collection,
+ON CONFLICT (code, collection, edition_id) DO UPDATE SET
   table_code=EXCLUDED.table_code, title=EXCLUDED.title, unit=EXCLUDED.unit,
   work_composition=EXCLUDED.work_composition, tech_conditions=EXCLUDED.tech_conditions,
   edition_id=EXCLUDED.edition_id, source_ref=EXCLUDED.source_ref,
   needs_review=EXCLUDED.needs_review, search_tsv=EXCLUDED.search_tsv"""
 
-UPSERT_RES = """INSERT INTO norm_resources(norm_code, res_code, res_name, quantity, res_kind)
-VALUES (%(norm_code)s, %(res_code)s, %(res_name)s, %(quantity)s, %(res_kind)s)
-ON CONFLICT (norm_code, res_code, quantity) DO UPDATE SET
+UPSERT_RES = """INSERT INTO norm_resources(norm_code, collection, edition_id, res_code, res_name, quantity, res_kind)
+VALUES (%(norm_code)s, %(collection)s, %(edition_id)s, %(res_code)s, %(res_name)s, %(quantity)s, %(res_kind)s)
+ON CONFLICT (norm_code, collection, edition_id, res_code, quantity) DO UPDATE SET
   res_name=EXCLUDED.res_name, res_kind=EXCLUDED.res_kind"""
 
 
@@ -166,6 +166,8 @@ def run(dsn: str, edition_id: str, files: list[str], collection: str | None):
                 for res in payload["resources"]:
                     res_batch.append({
                         "norm_code": payload["code"],
+                        "collection": payload["collection"],
+                        "edition_id": edition_id,
                         "res_code": res["code"],
                         "res_name": res["name"],
                         "quantity": res["quantity"],
