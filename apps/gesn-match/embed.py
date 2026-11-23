@@ -4,6 +4,7 @@ e5-small query/passage prefixes are required by the model.
 """
 from __future__ import annotations
 
+MODEL_NAME = "intfloat/multilingual-e5-small"
 RERANKER_NAME = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
 
 _st_model = None
