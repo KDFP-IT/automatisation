@@ -370,9 +370,11 @@ def create_match_app():
                         c["machines"] = "; ".join(
                             f"{r[1] or r[0]} ({r[2]})" for r in res if r[3] == "machine")[:500]
                     verified = llm_verify(pos, cands[:5], profile)[:top_k]
-                    needs_clar = any(v.get("status") == "clarify" for v in verified)
+                    needs_clar = (not verified
+                                  or any(v.get("status") == "clarify" for v in verified)
+                                  or all(v.get("status") == "reject" for v in verified))
                     rows_out.append({**pos, "candidates": verified,
-                                     "needs_clarification": needs_clar or not verified})
+                                     "needs_clarification": needs_clar})
             write_report(rows_out, folder / "result.xlsx")
             status = {"status": "done", "rows": rows_out}
         except ValueError as error:
