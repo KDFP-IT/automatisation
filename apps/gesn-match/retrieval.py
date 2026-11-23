@@ -23,11 +23,11 @@ fts AS (
 ),
 trgm AS (
   SELECT n.code,
-         GREATEST(similarity(n.code, q.raw), similarity(n.title, q.raw)) AS trgm_score,
-         ROW_NUMBER() OVER (ORDER BY GREATEST(similarity(n.code, q.raw), similarity(n.title, q.raw)) DESC) AS rnk
+         GREATEST(word_similarity(q.raw, n.code), word_similarity(q.raw, n.title)) AS trgm_score,
+         ROW_NUMBER() OVER (ORDER BY GREATEST(word_similarity(q.raw, n.code), word_similarity(q.raw, n.title)) DESC) AS rnk
   FROM norms n, q
   WHERE n.collection = %(collection)s AND n.edition_id = %(edition_id)s
-    AND (n.code %% q.raw OR n.title %% q.raw)
+    AND (n.code %> q.raw OR n.title %> q.raw)
 ),
 vec AS (
   SELECT n.code,

@@ -82,6 +82,21 @@ HEADER_PATTERNS = {
 SECTION_RE = re.compile(r"^\s*(раздел|подраздел)\b", re.I)
 
 
+DOC_CTX_RE = re.compile(r"объект|стройка|наименование\s+работ", re.I)
+
+
+def doc_context(grid) -> str:
+    """Object name from the VOR title block (disambiguates tramway vs railway etc.)."""
+    for row in grid[:30]:
+        cells = [str(c).strip() for c in row]
+        for col, cell in enumerate(cells):
+            if cell and DOC_CTX_RE.search(cell):
+                for nxt in cells[col + 1:]:
+                    if nxt:
+                        return nxt[:200]
+    return ""
+
+
 def find_header(grid):
     for idx, row in enumerate(grid[:30]):
         cells = [str(c).strip() for c in row]
@@ -126,6 +141,7 @@ def parse_vor(data: bytes) -> list[dict]:
             start = header_idx + 1 if header_idx is not None else 0
             if mapping is None:
                 mapping = {"name": 0, "unit": 1, "qty": 2}
+            context = doc_context(grid)
             for i in range(start, len(grid)):
                 row = grid[i]
                 name = str(row[mapping["name"]]).strip() if mapping["name"] < len(row) else ""
@@ -138,7 +154,7 @@ def parse_vor(data: bytes) -> list[dict]:
                 rows_out.append({
                     "row_no": len(rows_out) + 1,
                     "name": name, "unit": unit, "quantity": qty,
-                    "sheet": sheet.title,
+                    "sheet": sheet.title, "context": context,
                 })
                 if len(rows_out) >= MAX_VOR_ROWS:
                     raise ValueError(f"Больше {MAX_VOR_ROWS} позиций — разбейте ведомость.")
@@ -262,7 +278,8 @@ def llm_verify_batch(positions: list[dict], cand_lists: list[list[dict]],
         )
         blocks.append(
             f"Позиция {i}: {pos['name']} (ед.: {pos.get('unit')}, кол-во: {pos.get('quantity')}).\n"
-            f"Кандидаты:\n{cand_text}"
+            + (f"Объект: {pos['context']}.\n" if pos.get("context") else "")
+            + f"Кандидаты:\n{cand_text}"
         )
     prompt = (
         "Проверь применимость кандидатов к каждой позиции по критериям:\n"
@@ -468,7 +485,7 @@ def create_match_app():
                         jobs[key].update(progress=0.05 + 0.45 * i / max(len(work), 1))
                     if pos.get("skipped"):
                         continue
-                    query = f"{pos['name']} {pos.get('unit', '')}".strip()
+                    query = f"{pos['name']} {pos.get('unit', '')} {pos.get('context', '')}".strip()
                     vec = embed_query(query)
                     cands = search_candidates(con, query, vec, collection, edition_id, limit=30)
                     cands = rerank(query, cands, top_k=5)
