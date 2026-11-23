@@ -282,14 +282,14 @@ def llm_verify_batch(positions: list[dict], cand_lists: list[list[dict]],
         "response_format": {"type": "json_object"},
         "max_tokens": 4000,
     }).encode()
-    try:
+    def _call(prompt_body: bytes) -> str:
         content = ""
         for _attempt in range(3):
             if _attempt:
                 import time as _time
                 _time.sleep(10)
             req = Request(
-                ROUTER_BASE_URL.rstrip("/") + "/chat/completions", data=body,
+                ROUTER_BASE_URL.rstrip("/") + "/chat/completions", data=prompt_body,
                 headers={"Content-Type": "application/json",
                          "Authorization": f"Bearer {ROUTER_API_KEY}"},
                 method="POST",
@@ -299,36 +299,80 @@ def llm_verify_batch(positions: list[dict], cand_lists: list[list[dict]],
             content = payload["choices"][0]["message"]["content"] or ""
             if content.strip():
                 break
-        data = parse_verdicts(content, 0)
-        if isinstance(data, dict) and isinstance(data.get("results"), list):
-            per_pos = {}
-            for entry in data["results"]:
-                if isinstance(entry, dict) and isinstance(entry.get("position_index"), int):
-                    per_pos[entry["position_index"]] = parse_verdicts(json.dumps(entry), 0)
-            verdicts = [per_pos.get(i, {}) for i in range(len(positions))]
-        else:
-            verdicts = [parse_verdicts(json.dumps(data), len(cands)) for cands in cand_lists]
-            if len(verdicts) == 1 and len(positions) > 1:
-                verdicts = verdicts * len(positions)
-        if not any(verdicts):
-            raise ValueError(f"unparsed LLM verdict: {content[:200]}")
-    except Exception as error:
-        import logging
-        logging.getLogger("gesn-match").exception("LLM batch verify failed: %s", error)
-        for cands in cand_lists:
-            for cand in cands:
-                cand["status"] = "error_retry"
-                cand["rationale"] = "Проверка не выполнена (LLM недоступен)."
-        return cand_lists
-    out = []
-    for cands, verdict in zip(cand_lists, verdicts):
+        return content
+
+    def _apply(cands: list[dict], verdict: dict) -> None:
         for j, cand in enumerate(cands):
             status, rationale, missing = normalize_verdict(verdict.get(j, {}))
             cand["status"] = status
             cand["rationale"] = rationale
             cand["missing"] = missing
-        out.append(cands)
-    return out
+
+    try:
+        content = _call(body)
+        try:
+            envelope = json.loads(content, strict=False)
+        except (json.JSONDecodeError, TypeError):
+            envelope = None
+        verdicts: list[dict] = [{} for _ in positions]
+        if isinstance(envelope, dict) and isinstance(envelope.get("results"), list):
+            for entry in envelope["results"]:
+                if not isinstance(entry, dict):
+                    continue
+                idx = entry.get("position_index")
+                if isinstance(idx, int) and 0 <= idx < len(positions):
+                    verdicts[idx] = parse_verdicts(json.dumps(entry), 0)
+        else:
+            single = parse_verdicts(content, 0)
+            if single:
+                verdicts = [single for _ in positions]
+        if not any(verdicts):
+            raise ValueError(f"unparsed LLM verdict: {content[:200]}")
+    except Exception as error:
+        import logging
+        logging.getLogger("gesn-match").exception("LLM batch verify failed, per-position fallback: %s", error)
+        for pos, cands in zip(positions, cand_lists):
+            try:
+                solo = _verify_single(pos, cands, checklist, stops)
+            except Exception:
+                solo = {}
+            _apply(cands, solo)
+        return cand_lists
+    for cands, verdict in zip(cand_lists, verdicts):
+        _apply(cands, verdict)
+    return cand_lists
+
+
+def _verify_single(position: dict, candidates: list[dict],
+                   checklist: str, stops: str) -> dict:
+    """Single-position verify used as fallback. Raises when unusable."""
+    import json as _json
+    from urllib.request import Request as _Request, urlopen as _urlopen
+    cand_text = "\n".join(
+        (f"[{j}] {c.get('code')} — {c.get('title')} (ед.: {c.get('unit')})")[:300]
+        for j, c in enumerate(candidates)
+    )
+    prompt = (
+        f"Позиция ВОР: {position['name']} (ед.: {position.get('unit')}, "
+        f"кол-во: {position.get('quantity')}).\nКандидаты:\n{cand_text}\n\n"
+        f"Проверь применимость по критериям:\n{checklist}\n"
+        f"Стоп-условия (такой кандидат — clarify):\n{stops}\n\n"
+        "Ответь СТРОГО JSON, например: "
+        "{\"verdicts\": [{\"index\": 0, \"status\": \"clarify\", "
+        "\"rationale\": \"...\", \"missing\": [\"...\"]}]}. "
+        "Допустимые status: ok, clarify, reject. "
+        "rationale — 1-2 предложения, до 300 символов."
+    )
+    content = _call(json.dumps({
+        "model": SUB_MODEL,
+        "messages": [{"role": "user", "content": prompt}],
+        "response_format": {"type": "json_object"},
+        "max_tokens": 4000,
+    }).encode())
+    verdict = parse_verdicts(content, len(candidates))
+    if not verdict:
+        raise ValueError(f"unparsed single verdict: {content[:200]}")
+    return verdict
 
 
 
