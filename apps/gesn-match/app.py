@@ -150,6 +150,52 @@ def load_profile(name: str) -> dict:
         return yaml.safe_load(handle)
 
 
+STATUS_ALIASES = {
+    "ok": "ok", "подходит": "ok", "applicable": "ok",
+    "clarify": "clarify", "уточнить": "clarify",
+    "requires_clarification": "clarify", "need_clarification": "clarify",
+    "reject": "reject", "отклонён": "reject", "not_applicable": "reject",
+}
+
+
+def parse_verdicts(content: str, count: int) -> dict[int, dict]:
+    """Accept our {verdicts:[...]} schema and the model's own shapes.
+
+    Fallbacks, in order: verdicts list; per-candidate dict with index/
+    candidate_index; decision/applicable synonyms. Never raises."""
+    try:
+        data = json.loads(content)
+    except (json.JSONDecodeError, TypeError):
+        start, end = content.find("{"), content.rfind("}")
+        try:
+            data = json.loads(content[start:end + 1]) if start != -1 and end > start else {}
+        except (json.JSONDecodeError, TypeError):
+            return {}
+    if not isinstance(data, dict):
+        return {}
+    items = data.get("verdicts")
+    if isinstance(items, list):
+        return {v.get("index"): v for v in items if isinstance(v, dict)}
+    for key in ("candidate_index", "index"):
+        if isinstance(data.get(key), int):
+            return {data[key]: data}
+    if "decision" in data or "applicable" in data:
+        return {0: data}
+    return {}
+
+
+def normalize_verdict(verdict: dict) -> tuple[str, str, list]:
+    raw = str(verdict.get("status", "") or verdict.get("decision", "")).strip().lower()
+    if not raw and isinstance(verdict.get("applicable"), bool):
+        raw = "ok" if verdict["applicable"] else "reject"
+    status = STATUS_ALIASES.get(raw, "clarify")
+    rationale = str(verdict.get("rationale", "") or verdict.get("reason", ""))[:2000]
+    missing = verdict.get("missing", [])
+    if isinstance(missing, str):
+        missing = [missing]
+    return status, rationale, list(missing or [])
+
+
 def llm_verify(position: dict, candidates: list[dict], profile: dict) -> list[dict]:
     """LLM applicability check. Never invents codes: only reorders/labels input."""
     if not ROUTER_API_KEY or not candidates:
@@ -169,8 +215,11 @@ def llm_verify(position: dict, candidates: list[dict], profile: dict) -> list[di
         f"Кандидаты из каталога ГЭСН:\n{cand_text}\n\n"
         f"Проверь применимость каждого кандидата по критериям:\n{checklist}\n"
         f"Стоп-условия (такой кандидат — clarify):\n{stops}\n\n"
-        "Ответь СТРОГО JSON: {\"verdicts\": [{\"index\": N, \"status\": \"ok|clarify|reject\", "
-        "\"rationale\": \"...\", \"missing\": [\"...\"]}]}. Шифры не сочиняй, оценивай только данный список."
+        "Ответь СТРОГО JSON, например: "
+        "{\"verdicts\": [{\"index\": 0, \"status\": \"clarify\", "
+        "\"rationale\": \"...\", \"missing\": [\"...\"]}]}. "
+        "Допустимые status: ok, clarify, reject. "
+        "Шифры не сочиняй, оценивай только данный список."
     )
     body = json.dumps({
         "model": SUB_MODEL,
@@ -187,19 +236,22 @@ def llm_verify(position: dict, candidates: list[dict], profile: dict) -> list[di
         )
         with urlopen(req, timeout=120) as resp:
             payload = json.loads(resp.read().decode("utf-8"))
-        content = payload["choices"][0]["message"]["content"]
-        verdicts = {v.get("index"): v for v in json.loads(content).get("verdicts", [])}
-    except Exception:
+        content = payload["choices"][0]["message"]["content"] or ""
+        verdicts = parse_verdicts(content, len(candidates))
+        if not verdicts:
+            raise ValueError(f"unparsed LLM verdict: {content[:200]}")
+    except Exception as error:
+        import logging
+        logging.getLogger("gesn-match").exception("LLM verify failed: %s", error)
         for cand in candidates:
             cand["status"] = "error_retry"
             cand["rationale"] = "Проверка не выполнена (LLM недоступен)."
         return candidates
     for i, cand in enumerate(candidates):
-        verdict = verdicts.get(i, {})
-        status = verdict.get("status", "clarify")
-        cand["status"] = status if status in ("ok", "clarify", "reject") else "clarify"
-        cand["rationale"] = str(verdict.get("rationale", ""))[:2000]
-        cand["missing"] = list(verdict.get("missing", []) or [])
+        status, rationale, missing = normalize_verdict(verdicts.get(i, {}))
+        cand["status"] = status
+        cand["rationale"] = rationale
+        cand["missing"] = missing
     return candidates
 
 
