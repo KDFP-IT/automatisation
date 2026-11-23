@@ -79,8 +79,29 @@ HEADER_PATTERNS = {
 }
 
 
+SECTION_RE = re.compile(r"^\s*(раздел|подраздел)\b", re.I)
+
+
+def find_header(grid):
+    for idx, row in enumerate(grid[:30]):
+        cells = [str(c).strip() for c in row]
+        mapping = {}
+        for key, pattern in HEADER_PATTERNS.items():
+            for col, cell in enumerate(cells):
+                if cell and pattern.search(cell):
+                    mapping[key] = col
+                    break
+        if "name" in mapping and "unit" in mapping and "qty" in mapping:
+            return idx, mapping
+    return None, None
+
+
 def parse_vor(data: bytes) -> list[dict]:
-    """Extract VOR positions from xlsx bytes. Caps mirror kdfp_smb_reader.py."""
+    """Extract VOR positions from xlsx bytes. Caps mirror kdfp_smb_reader.py.
+
+    Header row is searched in the first 30 rows (title blocks precede it);
+    section rows (Раздел N ...) and rows without quantity are skipped.
+    """
     from openpyxl import load_workbook
     import tempfile
     with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
@@ -108,10 +129,12 @@ def parse_vor(data: bytes) -> list[dict]:
             for i in range(start, len(grid)):
                 row = grid[i]
                 name = str(row[mapping["name"]]).strip() if mapping["name"] < len(row) else ""
-                if not name:
+                if not name or SECTION_RE.match(name):
                     continue
                 unit = str(row[mapping["unit"]]).strip() if mapping["unit"] < len(row) else ""
                 qty = str(row[mapping["qty"]]).strip() if mapping["qty"] < len(row) else ""
+                if not qty:
+                    continue
                 rows_out.append({
                     "row_no": len(rows_out) + 1,
                     "name": name, "unit": unit, "quantity": qty,
@@ -125,22 +148,6 @@ def parse_vor(data: bytes) -> list[dict]:
             os.unlink(tmp_path)
         except OSError:
             pass
-
-
-def find_header(grid):
-    for idx, row in enumerate(grid[:10]):
-        cells = [str(c).strip() for c in row]
-        mapping = {}
-        for key, pattern in HEADER_PATTERNS.items():
-            for col, cell in enumerate(cells):
-                if cell and pattern.search(cell):
-                    mapping[key] = col
-                    break
-        if "name" in mapping:
-            mapping.setdefault("unit", 1)
-            mapping.setdefault("qty", 2)
-            return idx, mapping
-    return None, None
 
 
 def load_profile(name: str) -> dict:
