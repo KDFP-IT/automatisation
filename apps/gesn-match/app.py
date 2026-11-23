@@ -166,12 +166,12 @@ def parse_verdicts(content: str, count: int) -> dict[int, dict]:
     decision/applicable synonyms. Never raises."""
     def decode(text: str):
         try:
-            return json.loads(text)
+            return json.loads(text, strict=False)
         except (json.JSONDecodeError, TypeError):
             start, end = text.find("{"), text.rfind("}")
             if start != -1 and end > start:
                 try:
-                    return json.loads(text[start:end + 1])
+                    return json.loads(text[start:end + 1], strict=False)
                 except (json.JSONDecodeError, TypeError):
                     pass
             return None
