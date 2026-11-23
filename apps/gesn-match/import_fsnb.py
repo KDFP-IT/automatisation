@@ -138,7 +138,7 @@ UPSERT_NORM = """INSERT INTO norms(code, collection, table_code, title, unit,
 VALUES (%(code)s, %(collection)s, %(table_code)s, %(title)s, %(unit)s,
   %(work_composition)s, %(tech_conditions)s, %(edition_id)s, %(source_ref)s,
   %(needs_review)s,
-  to_tsvector('russian', unaccent(%(title)s || ' ' || array_to_string(%(work_composition)s, ' '))))
+  to_tsvector('russian', unaccent(%(title)s || ' ' || array_to_string(%(work_composition)s::text[], ' '))))
 ON CONFLICT (code) DO UPDATE SET collection=EXCLUDED.collection,
   table_code=EXCLUDED.table_code, title=EXCLUDED.title, unit=EXCLUDED.unit,
   work_composition=EXCLUDED.work_composition, tech_conditions=EXCLUDED.tech_conditions,
