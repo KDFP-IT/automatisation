@@ -161,16 +161,29 @@ STATUS_ALIASES = {
 def parse_verdicts(content: str, count: int) -> dict[int, dict]:
     """Accept our {verdicts:[...]} schema and the model's own shapes.
 
-    Fallbacks, in order: verdicts list; per-candidate dict with index/
-    candidate_index; decision/applicable synonyms. Never raises."""
-    try:
-        data = json.loads(content)
-    except (json.JSONDecodeError, TypeError):
-        start, end = content.find("{"), content.rfind("}")
+    Fallbacks, in order: verdicts list; double-encoded JSON string;
+    top-level list; per-candidate dict with index/candidate_index;
+    decision/applicable synonyms. Never raises."""
+    def decode(text: str):
         try:
-            data = json.loads(content[start:end + 1]) if start != -1 and end > start else {}
+            return json.loads(text)
         except (json.JSONDecodeError, TypeError):
-            return {}
+            start, end = text.find("{"), text.rfind("}")
+            if start != -1 and end > start:
+                try:
+                    return json.loads(text[start:end + 1])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            return None
+
+    data = decode(content)
+    if isinstance(data, str):
+        data = decode(data)
+    if isinstance(data, list):
+        items = [v for v in data if isinstance(v, dict)]
+        if items and any(isinstance(v.get("index"), int) for v in items):
+            return {v.get("index"): v for v in items}
+        return {}
     if not isinstance(data, dict):
         return {}
     items = data.get("verdicts")
@@ -228,15 +241,19 @@ def llm_verify(position: dict, candidates: list[dict], profile: dict) -> list[di
         "max_tokens": 2000,
     }).encode()
     try:
-        req = Request(
-            ROUTER_BASE_URL.rstrip("/") + "/chat/completions", data=body,
-            headers={"Content-Type": "application/json",
-                     "Authorization": f"Bearer {ROUTER_API_KEY}"},
-            method="POST",
-        )
-        with urlopen(req, timeout=120) as resp:
-            payload = json.loads(resp.read().decode("utf-8"))
-        content = payload["choices"][0]["message"]["content"] or ""
+        content = ""
+        for _attempt in range(2):
+            req = Request(
+                ROUTER_BASE_URL.rstrip("/") + "/chat/completions", data=body,
+                headers={"Content-Type": "application/json",
+                         "Authorization": f"Bearer {ROUTER_API_KEY}"},
+                method="POST",
+            )
+            with urlopen(req, timeout=120) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+            content = payload["choices"][0]["message"]["content"] or ""
+            if content.strip():
+                break
         verdicts = parse_verdicts(content, len(candidates))
         if not verdicts:
             raise ValueError(f"unparsed LLM verdict: {content[:200]}")
