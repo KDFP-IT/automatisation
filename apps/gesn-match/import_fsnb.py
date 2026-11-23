@@ -164,7 +164,13 @@ def run(dsn: str, edition_id: str, files: list[str], collection: str | None):
                     continue
                 norms_batch.append(payload)
                 for res in payload["resources"]:
-                    res_batch.append({"norm_code": payload["code"], **res})
+                    res_batch.append({
+                        "norm_code": payload["code"],
+                        "res_code": res["code"],
+                        "res_name": res["name"],
+                        "quantity": res["quantity"],
+                        "res_kind": res["kind"],
+                    })
                 if len(norms_batch) >= BATCH:
                     for row in norms_batch:
                         con.execute(UPSERT_NORM, row)
