@@ -175,7 +175,6 @@ def parse_verdicts(content: str, count: int) -> dict[int, dict]:
                 except (json.JSONDecodeError, TypeError):
                     pass
             return None
-
     data = decode(content)
     if isinstance(data, str):
         data = decode(data)
@@ -184,17 +183,29 @@ def parse_verdicts(content: str, count: int) -> dict[int, dict]:
         if items and any(isinstance(v.get("index"), int) for v in items):
             return {v.get("index"): v for v in items}
         return {}
-    if not isinstance(data, dict):
+    if isinstance(data, dict):
+        items = data.get("verdicts")
+        if isinstance(items, list):
+            return {v.get("index"): v for v in items if isinstance(v, dict)}
+        for key in ("candidate_index", "index"):
+            if isinstance(data.get(key), int):
+                return {data[key]: data}
+        if "decision" in data or "applicable" in data:
+            return {0: data}
         return {}
-    items = data.get("verdicts")
-    if isinstance(items, list):
-        return {v.get("index"): v for v in items if isinstance(v, dict)}
-    for key in ("candidate_index", "index"):
-        if isinstance(data.get(key), int):
-            return {data[key]: data}
-    if "decision" in data or "applicable" in data:
-        return {0: data}
-    return {}
+    import re as _re
+    salvaged = {}
+    for match in _re.finditer(
+        r'"index"\s*:\s*(\d+)[^}]*?"status"\s*:\s*"([A-Za-z_а-яА-ЯёЁ]+)"', content
+    ):
+        salvaged[int(match.group(1))] = {"index": int(match.group(1)),
+                                          "status": match.group(2)}
+    for match in _re.finditer(
+        r'"status"\s*:\s*"([A-Za-z_а-яА-ЯёЁ]+)"[^}]*?"index"\s*:\s*(\d+)', content
+    ):
+        salvaged.setdefault(int(match.group(2)), {"index": int(match.group(2)),
+                                                   "status": match.group(1)})
+    return salvaged
 
 
 def normalize_verdict(verdict: dict) -> tuple[str, str, list]:
@@ -232,13 +243,14 @@ def llm_verify(position: dict, candidates: list[dict], profile: dict) -> list[di
         "{\"verdicts\": [{\"index\": 0, \"status\": \"clarify\", "
         "\"rationale\": \"...\", \"missing\": [\"...\"]}]}. "
         "Допустимые status: ok, clarify, reject. "
+        "rationale — 1-2 предложения, до 300 символов. "
         "Шифры не сочиняй, оценивай только данный список."
     )
     body = json.dumps({
         "model": SUB_MODEL,
         "messages": [{"role": "user", "content": prompt}],
         "response_format": {"type": "json_object"},
-        "max_tokens": 2000,
+        "max_tokens": 4000,
     }).encode()
     try:
         content = ""
