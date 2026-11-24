@@ -15,3 +15,4 @@ apps/bookmarks/webapp/data/
 apps/bookmarks/pdf-web-test-*/
 apps/kac/static/ui/
 apps/portal/dist/
+/deploy/portal/fonts/

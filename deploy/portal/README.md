@@ -56,6 +56,14 @@ if (window.self !== window.top || new URLSearchParams(window.location.search).ha
 
 Дополнительно: инструмент должен разрешать встраивание заголовком `Content-Security-Policy: frame-ancestors 'self'` и блокировать встраивание себя на чужих сайтах — `'self'`, а не `*`. У портала `frame-ancestors 'none'`.
 
+## Times New Roman для PDF КАЦ
+
+При запуске с `compose.kac-linux.yaml` контейнер читает шрифты из папки `deploy/portal/fonts/` только для чтения. Для другой папки укажите её абсолютный путь в `KAC_FONT_DIR` в серверном `.env`.
+
+Поместите в папку файлы Times New Roman, которые разрешено использовать на сервере: обычный, жирный, курсив и жирный курсив. При первом подключении пересоздайте контейнер КАЦ. Последующие запуски CD используют ту же папку.
+
+Проверить выбор шрифта можно командами `docker exec portal-kac-1 fc-match 'Times New Roman'` и `docker exec portal-kac-1 fc-match 'Times New Roman:style=Bold'`. Обе должны вернуть семейство Times New Roman.
+
 ## Доступ через Active Directory
 
 Сервис `auth` (`apps/auth`): вход по паре local либо bind `login@kdfp.ru` в AD, сессии — подписанные cookie. nginx проверяет каждый инструмент через `auth_request /auth/check?tool=<id>`: без сессии — 401, без права — 403. Меню фильтруется по `/auth/me`.

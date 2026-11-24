@@ -6,6 +6,7 @@ services:
       PDF_WEB_HTTPS: "${PDF_WEB_HTTPS:-0}"
     volumes:
       - kac-data:/data
+      - ${KAC_FONT_DIR:-./fonts}:/usr/local/share/fonts/kac-custom:ro
 
 volumes:
   kac-data:
