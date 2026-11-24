@@ -47,7 +47,7 @@ export function useKacJob() {
   const stage = ref('')
   const job = ref(null)
 
-  async function run({ docx, offers }) {
+  async function run({ docx, xlsx, offers }) {
     busy.value = true
     progress.value = 0
     stage.value = 'upload'
@@ -55,6 +55,7 @@ export function useKacJob() {
     try {
       const body = new FormData()
       if (docx) body.append('docx', docx)
+      if (xlsx) body.append('xlsx', xlsx)
       for (const { file, path } of offers) body.append('offer', file, path)
       const { id } = await upload(`${api}/jobs`, body, fraction => {
         progress.value = Math.round(fraction * 15)

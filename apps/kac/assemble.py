@@ -18,7 +18,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 import pypdfium2 as pdfium
 from lxml import etree as xml
-from PIL import Image, ImageOps
+from PIL import Image, ImageChops, ImageFilter, ImageOps
 
 
 NS = {
@@ -33,6 +33,7 @@ NS = {
 DOCUMENT = "word/document.xml"
 RELATIONSHIPS = "word/_rels/document.xml.rels"
 CONTENT_TYPES = "[Content_Types].xml"
+STYLES = "word/styles.xml"
 OFFER_NAME = re.compile(r"^КП\s*(\d+)\s*\.\s*(\d+)(?![\d.])", re.IGNORECASE)
 DIVIDER = re.compile(r"^ПРАЙС[-–‑]ЛИСТЫ\s+К\s+РАЗДЕЛУ\s+КАЦ\s*№\s*(\d+)\b", re.IGNORECASE)
 SECTION_NAME = re.compile(r"^Раздел\s+(\d+)\s*[-–—]\s*(\S.*)$", re.IGNORECASE)
@@ -261,8 +262,8 @@ def render_offers(offers, png_folder):
                 if not len(pdf):
                     raise ValueError("нет страниц")
                 for index in range(len(pdf)):
-                    with closing(pdf[index]) as page, closing(page.render(scale=250 / 72)) as bitmap:
-                        target = png_folder / f"{offer.stem}_стр_{index + 1:03d}.png"
+                    with closing(pdf[index]) as page, closing(page.render(scale=350 / 72)) as bitmap:
+                        target = png_folder / f"{offer.stem}_стр_{index + 1:03d}.jpg"
                         image = bitmap.to_pil()
                         if orientation_reader and image.height > image.width:
                             rotation = text_rotation(page)
@@ -270,7 +271,7 @@ def render_offers(offers, png_folder):
                                 rotation = scan_rotation(image, orientation_reader)
                             if rotation in (90, 270):
                                 image = image.rotate(-rotation, expand=True)
-                        image.save(target, dpi=(250, 250))
+                        image.convert("RGB").save(target, quality=95, subsampling=0, dpi=(350, 350))
                     rows.append((offer.name, index + 1, target))
         except Exception as error:
             raise ValueError(f"Не удалось подготовить «{offer.name}»: {error}") from error
@@ -339,19 +340,208 @@ def scan_rotation(image, executable):
     return 0
 
 
-def fitted_png(path, extent):
-    width = round(int(extent.get("cx")) * 250 / 914400)
-    height = round(int(extent.get("cy")) * 250 / 914400)
+def trim_offer_margins(image, width, height):
+    # Keep faint colored stamps and marks by checking every color channel.
+    red, green, blue = image.split()
+    darkest = ImageChops.darker(ImageChops.darker(red, green), blue)
+    if image.width > image.height * 1.10:
+        # Neutral scan background can be slightly gray. Keep colored marks
+        # and reject isolated dust pixels when estimating the crop.
+        lightest = ImageChops.lighter(ImageChops.lighter(red, green), blue)
+        color = ImageChops.subtract(lightest, darkest).point(lambda value: 255 if value >= 12 else 0)
+        ink = darkest.point(lambda value: 255 if value < 230 else 0)
+        mask = ImageChops.lighter(ink, color)
+        bounds = mask.filter(ImageFilter.BoxBlur(3)).point(
+            lambda value: 255 if value >= 48 else 0).getbbox()
+    else:
+        bounds = darkest.point(lambda value: 255 if value < 250 else 0).getbbox()
+    if bounds is None:
+        return image
+    left, top, right, bottom = bounds
+    padding = round(min(image.size) * 0.02)
+    box = (max(0, left - padding), max(0, top - padding),
+           min(image.width, right + padding), min(image.height, bottom + padding))
+    original_scale = min(width / image.width, height / image.height)
+    cropped_scale = min(width / (box[2] - box[0]), height / (box[3] - box[1]))
+    if cropped_scale < original_scale * 1.08:
+        return image
+    return image.crop(box)
+
+
+def fitted_image(path, extent, extension):
     with Image.open(path) as original:
-        fitted = ImageOps.contain(original.convert("RGB"), (width, height), Image.Resampling.LANCZOS)
+        landscape_offer = extension == ".jpg" and original.width > original.height * 1.10
+        dpi = 350 if extension == ".jpg" else 250
+        width = round(int(extent.get("cx")) * dpi / 914400)
+        height = round(int(extent.get("cy")) * dpi / 914400)
+        contents = original.convert("RGB")
+        if extension == ".jpg":
+            contents = trim_offer_margins(contents, width, height)
+        fitted = ImageOps.contain(contents, (width, height), Image.Resampling.LANCZOS)
         canvas = Image.new("RGB", (width, height), "white")
         canvas.paste(fitted, ((width - fitted.width) // 2, (height - fitted.height) // 2))
         buffer = io.BytesIO()
-        canvas.save(buffer, format="PNG")
+        if extension == ".jpg":
+            canvas.save(buffer, format="JPEG", quality=97 if landscape_offer else 95, subsampling=0)
+        else:
+            canvas.save(buffer, format="PNG")
         return buffer.getvalue()
 
 
-def write_document(source, target, titles, sections, single):
+def add_summary_footer(section, relationships, content_types, existing_ids, existing_parts, title):
+    part = "kac-summary-footer.xml"
+    while f"word/{part}" in existing_parts:
+        part = "_" + part
+    rid = "rIdKacSummaryFooter"
+    while rid in existing_ids:
+        rid += "_"
+    xml.SubElement(relationships, qname("rel", "Relationship"),
+                   Id=rid, Type=f"{NS['r']}/footer", Target=part)
+    xml.SubElement(content_types, qname("ct", "Override"),
+                   PartName=f"/word/{part}",
+                   ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml")
+    for ref in section.findall("w:footerReference", NS):
+        section.remove(ref)
+    section.insert(len(section.findall("w:headerReference", NS)),
+                   xml.Element(qname("w", "footerReference"),
+                               {qname("w", "type"): "default", qname("r", "id"): rid}))
+    footer = xml.fromstring(f'''
+        <w:ftr xmlns:w="{NS['w']}"><w:p>
+          <w:pPr><w:tabs><w:tab w:val="center" w:pos="11339"/>
+            <w:tab w:val="right" w:pos="22394"/></w:tabs>
+            <w:spacing w:before="0" w:after="0"/></w:pPr>
+          <w:r><w:tab/></w:r>
+          <w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/>
+            <w:color w:val="000000"/><w:sz w:val="12"/></w:rPr>
+            <w:t/></w:r>
+          <w:r><w:tab/></w:r>
+          <w:fldSimple w:instr=" PAGE \\# &quot;00&quot; ">
+            <w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/>
+              <w:color w:val="000000"/><w:sz w:val="16"/></w:rPr><w:t>00</w:t></w:r>
+          </w:fldSimple>
+        </w:p></w:ftr>'''.encode())
+    footer.find(".//w:r/w:t", NS).text = title
+    return f"word/{part}", xml.tostring(footer, encoding="UTF-8", xml_declaration=True)
+
+
+def blank_summary_header(section, original, following, relationships, content_types,
+                         existing_ids, existing_parts):
+    part = "kac-summary-header.xml"
+    while f"word/{part}" in existing_parts:
+        part = "_" + part
+    rid = "rIdKacSummaryHeader"
+    while rid in existing_ids:
+        rid += "_"
+    xml.SubElement(relationships, qname("rel", "Relationship"),
+                   Id=rid, Type=f"{NS['r']}/header", Target=part)
+    xml.SubElement(content_types, qname("ct", "Override"),
+                   PartName=f"/word/{part}",
+                   ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml")
+    for ref in section.findall("w:headerReference", NS):
+        section.remove(ref)
+    for kind in ("default", "first", "even"):
+        section.insert(0, xml.Element(qname("w", "headerReference"),
+                       {qname("w", "type"): kind, qname("r", "id"): rid}))
+    if following is not None:
+        for kind, ref in original.items():
+            if following.find(f"w:headerReference[@w:type='{kind}']", NS) is None:
+                following.insert(0, deepcopy(ref))
+    return f"word/{part}", f'<w:hdr xmlns:w="{NS["w"]}"><w:p/></w:hdr>'.encode()
+
+
+def insert_summary(document, pages, shape_id, relationships, content_types, existing_ids, existing_parts, title):
+    body = document.find("w:body", NS)
+    headings = [p for p in body.findall("w:p", NS)
+                if paragraph_text(p).casefold() == "сводная таблица результатов конъюнктурного анализа"
+                and p.find("w:pPr/w:sectPr", NS) is not None]
+    if len(headings) != 1:
+        raise ValueError("В DOCX нужен один оформленный раздел «Сводная таблица результатов конъюнктурного анализа».")
+    block = headings[0].getnext()
+    if not empty_offer_block(block) or block.find("w:pPr/w:sectPr", NS) is None:
+        raise ValueError("После заголовка сводной таблицы нужен пустой абзац с разрывом раздела.")
+    props = block.find("w:pPr", NS)
+    section = props.find("w:sectPr", NS)
+    size, _, _ = page_size(section)
+    for key, value in (("w", "23811"), ("h", "16838"), ("orient", "landscape"), ("code", "8")):
+        size.set(qname("w", key), value)
+    margins = section.find("w:pgMar", NS)
+    if margins is None:
+        margins = xml.SubElement(section, qname("w", "pgMar"))
+    for key in ("top", "bottom", "left", "right", "header", "footer", "gutter"):
+        margins.set(qname("w", key), "0")
+    initial_start_seen = False
+    for paragraph in body:
+        props_section = paragraph if paragraph.tag == qname("w", "sectPr") else paragraph.find("w:pPr/w:sectPr", NS)
+        if props_section is not None:
+            numbering = props_section.find("w:pgNumType", NS)
+            if numbering is not None and qname("w", "start") in numbering.attrib:
+                if initial_start_seen:
+                    numbering.attrib.pop(qname("w", "start"))
+                initial_start_seen = True
+    original_footer = next((ref for p in reversed(list(body)[:body.index(block) + 1])
+                            if (ref := p.find("w:pPr/w:sectPr/w:footerReference[@w:type='default']", NS))
+                            is not None), None)
+    numbering = section.find("w:pgNumType", NS)
+    if numbering is None:
+        numbering = xml.Element(qname("w", "pgNumType"))
+        section.insert(section.index(margins) + 1, numbering)
+    numbering.set(qname("w", "fmt"), "decimalZero")
+    next_section = next((s for p in list(body)[body.index(block) + 1:]
+                         if (s := p.find("w:pPr/w:sectPr", NS)) is not None), None)
+    if (original_footer is not None and next_section is not None
+            and next_section.find("w:footerReference[@w:type='default']", NS) is None):
+        next_section.insert(len(next_section.findall("w:headerReference", NS)), deepcopy(original_footer))
+    original_headers = {}
+    for preceding in list(body)[:body.index(block) + 1]:
+        for ref in preceding.findall("w:pPr/w:sectPr/w:headerReference", NS):
+            original_headers[ref.get(qname("w", "type"))] = ref
+    for key, value in (("left", "567"), ("right", "850"), ("top", "850"),
+                       ("bottom", "850"), ("footer", "455")):
+        margins.set(qname("w", key), value)
+    props.remove(section)
+    template = populate_empty_block(block)[0]
+    block.remove(template)
+    footer_part, footer_data = add_summary_footer(
+        section, relationships, content_types, existing_ids, existing_parts, title)
+    images = {footer_part: footer_data}
+    header_part, header_data = blank_summary_header(
+        section, original_headers, next_section, relationships, content_types, existing_ids, existing_parts)
+    images[header_part] = header_data
+    paragraph = block
+    for number, png in enumerate(pages, 1):
+        if number > 1:
+            following = xml.Element(qname("w", "p"))
+            paragraph.addnext(following)
+            paragraph = following
+        properties = paragraph.find("w:pPr", NS)
+        if properties is None:
+            properties = xml.SubElement(paragraph, qname("w", "pPr"))
+        if number > 1:
+            xml.SubElement(properties, qname("w", "pageBreakBefore"))
+        xml.SubElement(properties, qname("w", "spacing"), {
+            qname("w", "before"): "0", qname("w", "after"): "0",
+        })
+        for tag in ("ind", "jc"):
+            for node in properties.findall(f"w:{tag}", NS):
+                properties.remove(node)
+        xml.SubElement(properties, qname("w", "ind"), {
+            qname("w", "left"): "0", qname("w", "right"): "0", qname("w", "firstLine"): "0",
+        })
+        xml.SubElement(properties, qname("w", "jc"), {qname("w", "val"): "left"})
+        run = deepcopy(template)
+        for extent in run.xpath(".//wp:extent | .//a:xfrm/a:ext", namespaces=NS):
+            extent.set("cx", str(22300 * 635))
+            extent.set("cy", str(14950 * 635))
+        part, data = prepare_image(run, 0, number, shape_id + number, "Сводная таблица", number,
+                                   png, relationships, existing_ids, existing_parts)
+        run.find(".//wp:docPr", NS).set("descr", f"KAC-SUMMARY:{number}")
+        images[part] = data
+        paragraph.append(run)
+    attach_section(paragraph, section)
+    return images
+
+
+def write_document(source, target, titles, sections, single, summary_pages=(), summary_title=""):
     with ZipFile(source) as archive:
         document = xml.fromstring(archive.read(DOCUMENT))
         relationships = xml.fromstring(archive.read(RELATIONSHIPS))
@@ -360,7 +550,9 @@ def write_document(source, target, titles, sections, single):
         existing_ids = {item.get("Id") for item in relationships}
         shape_id = max(int(item.get("id")) for item in document.findall(".//wp:docPr", NS))
         existing_parts = set(archive.namelist())
-        images = {}
+        images = insert_summary(document, summary_pages, shape_id, relationships, content_types, existing_ids,
+                                existing_parts, summary_title) if summary_pages else {}
+        shape_id += len(summary_pages)
         for section, rows in sections.items():
             block, old_runs = layout[section]
             linux = sys.platform == "linux"
@@ -388,7 +580,22 @@ def write_document(source, target, titles, sections, single):
         if not any(item.get("Extension", "").lower() == "png" for item in content_types):
             xml.SubElement(content_types, qname("ct", "Default"),
                            Extension="png", ContentType="image/png")
+        if not any(item.get("Extension", "").lower() == "jpg" for item in content_types):
+            xml.SubElement(content_types, qname("ct", "Default"),
+                           Extension="jpg", ContentType="image/jpeg")
         updated = {DOCUMENT: document, RELATIONSHIPS: relationships, CONTENT_TYPES: content_types}
+        if summary_pages and STYLES in existing_parts:
+            styles = xml.fromstring(archive.read(STYLES))
+            for style in styles.findall("w:style", NS):
+                name = style.find("w:name", NS)
+                color = style.find("w:rPr/w:color", NS)
+                if name is not None and color is not None and (
+                    name.get(qname("w", "val"), "").casefold() in {"hyperlink", "followedhyperlink"}
+                    or color.get(qname("w", "val")) == "auto"
+                ):
+                    color.attrib.clear()
+                    color.set(qname("w", "val"), "000000")
+            updated[STYLES] = styles
         with ZipFile(target, "w", ZIP_DEFLATED) as output:
             for part in archive.infolist():
                 data = (xml.tostring(updated[part.filename], encoding="UTF-8", xml_declaration=True,
@@ -418,13 +625,20 @@ def page_size(section):
 
 def resize_offer_extent(run, section, landscape):
     _, width, height = page_size(section)
-    if (width > height) == landscape:
+    already_oriented = (width > height) == landscape
+    if already_oriented and not landscape:
         return
-    shift = (height - width) * 635
+    shift = 0 if already_oriented else (height - width) * 635
     inline = run.find("w:drawing/wp:inline", NS)
     extent = inline.find("wp:extent", NS)
     cx = int(extent.get("cx")) + shift
     cy = int(extent.get("cy")) - shift
+    if landscape:
+        margins = section.find("w:pgMar", NS)
+        if margins is not None:
+            side_space = sum(int(margins.get(qname("w", side), "0"))
+                             for side in ("left", "right", "gutter"))
+            cx = max(cx, (max(width, height) - side_space - 80) * 635)
     if min(cx, cy) <= 0:
         raise ValueError("Поля шаблона не оставляют места для изображения в выбранной ориентации.")
     for size in [extent, *inline.findall(".//a:xfrm/a:ext", NS)]:
@@ -509,14 +723,102 @@ def prepare_image(run, section, index, shape_id, offer, page, png,
     for crop in inline.findall(".//a:srcRect", NS):
         crop.getparent().remove(crop)
     relation_id = f"rIdKac{section}_{index}"
-    image_part = f"media/kac_{section}_{index}.png"
+    extension = ".jpg" if png.suffix.lower() == ".jpg" else ".png"
+    image_part = f"media/kac_{section}_{index}{extension}"
     while relation_id in existing_ids or f"word/{image_part}" in existing_parts:
         relation_id += "_"
-        image_part = image_part.removesuffix(".png") + "_.png"
+        image_part = image_part.removesuffix(extension) + "_" + extension
     xml.SubElement(relationships, qname("rel", "Relationship"),
                    Id=relation_id, Type=f"{NS['r']}/image", Target=image_part)
     inline.find(".//a:blip", NS).set(qname("r", "embed"), relation_id)
-    return f"word/{image_part}", fitted_png(png, inline.find("wp:extent", NS))
+    return f"word/{image_part}", fitted_image(png, inline.find("wp:extent", NS), extension)
+
+
+def blacken_word_headings(docx):
+    """Writer can reintroduce theme colors when saving the result as DOCX."""
+    fixed = docx.with_suffix(".fixed.docx")
+    with ZipFile(docx) as source:
+        document = xml.fromstring(source.read(DOCUMENT))
+        styles = xml.fromstring(source.read(STYLES))
+        heading_ids = set()
+        for style in styles.findall("w:style", NS):
+            name = style.find("w:name", NS)
+            label = name.get(qname("w", "val"), "").casefold() if name is not None else ""
+            if (label.startswith(("heading ", "заголовок ", "toc ", "contents "))
+                    or label in {"введение", "hyperlink", "followedhyperlink"}
+                    or style.find("w:pPr/w:outlineLvl", NS) is not None):
+                heading_ids.add(style.get(qname("w", "styleId")))
+                set_black_text(style)
+        for paragraph in document.findall("w:body/w:p", NS):
+            style = paragraph.find("w:pPr/w:pStyle", NS)
+            title = paragraph_text(paragraph)
+            if ((style is not None and style.get(qname("w", "val")) in heading_ids)
+                    or paragraph.find("w:pPr/w:outlineLvl", NS) is not None
+                    or (title.isupper() and len(title) <= 300)):
+                for run in paragraph.findall(".//w:r", NS):
+                    if run.find("w:t", NS) is not None:
+                        set_black_text(run)
+        updated = {DOCUMENT: document, STYLES: styles}
+        for name in source.namelist():
+            if re.fullmatch(r"word/footer[^/]*\.xml", name):
+                footer = xml.fromstring(source.read(name))
+                if set_page_number_font(footer):
+                    updated[name] = footer
+        with ZipFile(fixed, "w", ZIP_DEFLATED) as target:
+            for item in source.infolist():
+                node = updated.get(item.filename)
+                target.writestr(item, xml.tostring(node, encoding="UTF-8", xml_declaration=True)
+                                if node is not None else source.read(item))
+    fixed.replace(docx)
+
+
+def set_page_number_font(footer):
+    runs = []
+    for field in footer.findall(".//w:fldSimple", NS):
+        if re.match(r"\s*PAGE\b", field.get(qname("w", "instr"), ""), re.I):
+            runs.extend(field.findall(".//w:r", NS))
+    for paragraph in footer.findall(".//w:p", NS):
+        fields = []
+        for run in paragraph.findall(".//w:r", NS):
+            char = run.find("w:fldChar", NS)
+            kind = char.get(qname("w", "fldCharType")) if char is not None else None
+            if kind == "begin":
+                fields.append(([], []))
+            if fields:
+                fields[-1][0].append(run)
+                fields[-1][1].extend(run.xpath("./w:instrText/text()", namespaces=NS))
+                if kind == "end":
+                    parts, instruction = fields.pop()
+                    if re.match(r"\s*PAGE\b", "".join(instruction), re.I):
+                        runs.extend(parts)
+    for run in runs:
+        props = run.find("w:rPr", NS)
+        if props is None:
+            props = xml.Element(qname("w", "rPr"))
+            run.insert(0, props)
+        fonts = props.find("w:rFonts", NS)
+        if fonts is None:
+            fonts = xml.Element(qname("w", "rFonts"))
+            props.insert(0, fonts)
+        fonts.attrib.clear()
+        for key in ("ascii", "hAnsi", "eastAsia", "cs"):
+            fonts.set(qname("w", key), "Times New Roman")
+    return bool(runs)
+
+
+def set_black_text(element):
+    props = element.find("w:rPr", NS)
+    if props is None:
+        props = xml.Element(qname("w", "rPr"))
+        if element.tag == qname("w", "r"):
+            element.insert(0, props)
+        else:
+            element.append(props)
+    color = props.find("w:color", NS)
+    if color is None:
+        color = xml.SubElement(props, qname("w", "color"))
+    color.attrib.clear()
+    color.set(qname("w", "val"), "000000")
 
 
 def export(docx, pdf, report):
@@ -525,6 +827,7 @@ def export(docx, pdf, report):
             "/usr/bin/python3", str(Path(__file__).with_name("export-libreoffice.py")),
             str(docx), str(pdf), str(report.parent),
         ], check=True, timeout=300)
+        blacken_word_headings(docx)
         pages = tagged_offer_pages(pdf)
         with pdfium.PdfDocument(pdf) as exported:
             for item in pages:
@@ -544,7 +847,7 @@ def export(docx, pdf, report):
     return json.loads(report.read_text(encoding="utf-8-sig"))
 
 
-def tagged_offer_pages(pdf):
+def tagged_offer_pages(pdf, *, summary=False):
     from pypdf import PdfReader
     from pypdf.generic import ArrayObject, DictionaryObject
 
@@ -560,17 +863,48 @@ def tagged_offer_pages(pdf):
                 yield from visit(child, page)
         elif isinstance(node, DictionaryObject):
             page = node.get("/Pg", page)
-            marker = re.match(r"KAC:(\d+):(\d+)\|", str(node.get("/Alt", "")))
+            pattern = r"KAC-SUMMARY:(\d+)$" if summary else r"KAC:(\d+):(\d+)\|"
+            marker = re.match(pattern, str(node.get("/Alt", "")))
             if marker:
                 physical = reader.get_page_number(page)
                 if physical is None or physical < 0:
                     raise ValueError("Не удалось определить страницу изображения КП в PDF.")
-                section, index = map(int, marker.groups())
+                section, index = (0, int(marker[1])) if summary else map(int, marker.groups())
                 yield {"section": section, "index": index, "physical": physical + 1}
             if "/K" in node:
                 yield from visit(node.get("/K"), page)
 
     return sorted(visit(structure), key=lambda item: (item["physical"], item["section"], item["index"]))
+
+
+def restore_vector_summary(pdf, summary_pdf):
+    """Keep Writer's page references and use Calc's original page contents."""
+    from pypdf import PdfReader, PdfWriter
+    from pypdf.generic import NameObject
+
+    slots = tagged_offer_pages(pdf, summary=True)
+    with summary_pdf.open("rb") as source, pdf.open("rb") as original:
+        summary = PdfReader(source)
+        physical = [slot["physical"] for slot in slots]
+        if ([slot["index"] for slot in slots] != list(range(1, len(summary.pages) + 1))
+                or len(physical) != len(set(physical))):
+            raise ValueError("Не удалось сопоставить страницы сводной таблицы с итоговым PDF.")
+        writer = PdfWriter(clone_from=original)
+        original.seek(0)
+        writer_export = PdfReader(original)
+        for slot, sheet in zip(slots, summary.pages, strict=True):
+            page = writer.pages[slot["physical"] - 1]
+            if any(abs(float(a) - float(b)) > 3 for a, b in zip(page.mediabox, sheet.mediabox)):
+                raise ValueError("Размер страницы сводной таблицы в итоговом PDF отличается от A3.")
+            page.replace_contents(None)
+            page.pop(NameObject("/Annots"), None)
+            footer = writer_export.pages[slot["physical"] - 1]
+            footer.cropbox.upper_right = (float(page.mediabox.right), 36)
+            page.merge_page(sheet)
+            page.merge_page(footer)
+        with pdf.with_suffix(".vector.pdf").open("wb") as output:
+            writer.write(output)
+    pdf.with_suffix(".vector.pdf").replace(pdf)
 
 
 def check_pagination(sections, report):
@@ -595,7 +929,100 @@ def check_pagination(sections, report):
     return pages
 
 
-def assemble(source, folder, output, *, approve):
+def align_summary_tables(pdf, work):
+    from pypdf import PdfWriter, Transformation
+
+    bounds = []
+    with pdfium.PdfDocument(pdf) as document:
+        if not 1 <= len(document) <= 250:
+            raise ValueError("Сводная таблица должна занимать от 1 до 250 страниц.")
+        for page in document:
+            with closing(page):
+                width = page.get_width()
+                lines = Counter()
+                for element in page.get_objects():
+                    left, bottom, right, top = element.get_bounds()
+                    if right - left > width * 0.65 and top - bottom < 2:
+                        lines[round(left, 1), round(right, 1)] += 1
+                bounds.append(lines.most_common(1)[0][0] if lines and max(lines.values()) >= 3 else None)
+    aligned = work / "aligned-summary.pdf"
+    with pdf.open("rb") as source, aligned.open("wb") as target:
+        writer = PdfWriter(clone_from=source)
+        for page, span in zip(writer.pages, bounds, strict=True):
+            if span is None:
+                continue
+            left, right = span
+            desired_left = 10 * 72 / 25.4
+            desired_right = float(page.mediabox.width) - 15 * 72 / 25.4
+            scale = (desired_right - desired_left) / (right - left)
+            if 0.9 <= scale <= 1.15:
+                page.add_transformation(Transformation().scale(scale, 1).translate(
+                    tx=desired_left - left * scale))
+        writer.write(target)
+    aligned.replace(pdf)
+
+
+def render_summary(workbook, work, prepared=None):
+    if sys.platform != "linux":
+        raise ValueError("Вставка XLSX поддерживается обработчиком КАЦ на Linux с LibreOffice Calc.")
+    pdf = work / "summary.pdf"
+    subprocess.run([
+        "/usr/bin/python3", str(Path(__file__).with_name("export-libreoffice.py")),
+        str(workbook), str(pdf), str(work), *([str(prepared)] if prepared else []),
+    ], check=True, timeout=300)
+    align_summary_tables(pdf, work)
+    if prepared:
+        # Calc writes explicit heights with customHeight=false. Excel can then
+        # recalculate them on open and lose the extra space.
+        fixed = work / "fixed-summary.xlsx"
+        with ZipFile(workbook) as original, ZipFile(prepared) as source, ZipFile(fixed, "w", ZIP_DEFLATED) as target:
+            names = xml.fromstring(source.read("xl/workbook.xml"))
+            header_rows = {}
+            for name in names.findall(".//{*}definedName"):
+                if name.get("name") == "_xlnm.Print_Titles":
+                    match = re.search(r"!\$(\d+):\$(\d+)", name.text or "")
+                    if match:
+                        header_rows[int(name.get("localSheetId", "0")) + 1] = int(match[2])
+            for item in source.infolist():
+                data = source.read(item)
+                if re.fullmatch(r"xl/worksheets/sheet\d+\.xml", item.filename):
+                    sheet = xml.fromstring(data)
+                    index = int(re.search(r"sheet(\d+)", item.filename)[1])
+                    header = header_rows.get(index, 14)
+                    original_heights = {}
+                    if item.filename in original.namelist():
+                        original_sheet = xml.fromstring(original.read(item.filename))
+                        original_heights = {row.get("r"): float(row.get("ht"))
+                                            for row in original_sheet.findall("./{*}sheetData/{*}row")
+                                            if row.get("ht") is not None}
+                    for row in sheet.findall("./{*}sheetData/{*}row"):
+                        if row.get("ht") is not None:
+                            n = int(row.get("r"))
+                            if row.get("hidden") not in {"1", "true"} and (n > header or header - 2 <= n < header):
+                                height = max(float(row.get("ht")), original_heights.get(str(n), 0))
+                                row.set("ht", str(round(min(409, height + (18 if n < header else 9)), 2)))
+                            row.set("customHeight", "1")
+                    data = xml.tostring(sheet, encoding="UTF-8", xml_declaration=True)
+                target.writestr(item, data)
+        fixed.replace(prepared)
+    pages = []
+    with pdfium.PdfDocument(pdf) as document:
+        if not 1 <= len(document) <= 250:
+            raise ValueError("Сводная таблица должна занимать от 1 до 250 страниц.")
+        for index, page in enumerate(document):
+            with closing(page), closing(page.render(scale=3, crop=(
+                9 * 72 / 25.4, 14 * 72 / 25.4, 14 * 72 / 25.4, 14 * 72 / 25.4,
+            ))) as bitmap:
+                width, height = page.get_size()
+                if abs(width - 1191) > 3 or abs(height - 842) > 3:
+                    raise ValueError("Не удалось экспортировать сводную таблицу в альбомном формате A3.")
+                png = work / f"summary-{index + 1}.png"
+                bitmap.to_pil().save(png)
+                pages.append(png)
+    return pages
+
+
+def assemble(source, folder, output, *, approve, workbook=None):
     if source.suffix.lower() != ".docx" or not source.is_file():
         raise ValueError("Укажите существующий основной файл DOCX.")
     single, source_sections, empty = find_sections(folder)
@@ -626,9 +1053,13 @@ def assemble(source, folder, output, *, approve):
         name = f"КАЦ — раздел {next(iter(sections))}" if single else "КАЦ — полный комплект"
         docx = result / f"{name}.docx"
         pdf = docx.with_suffix(".pdf")
-        write_document(source, docx, titles, sections, single)
+        summary_pages = render_summary(workbook, work, result / "summary.xlsx") if workbook else []
+        summary_title = (work / "summary-title.txt").read_text(encoding="utf-8") if summary_pages else ""
+        write_document(source, docx, titles, sections, single, summary_pages, summary_title)
         print("Обновление оглавления и экспорт PDF…")
         pages = check_pagination(sections, export(docx, pdf, work / "pages.json"))
+        if summary_pages:
+            restore_vector_summary(pdf, work / "summary.pdf")
         rows = [row for section_rows in sections.values() for row in section_rows]
         with pdfium.PdfDocument(pdf) as exported:
             if len(exported) < pages[-1]["physical"]:
@@ -640,7 +1071,7 @@ def assemble(source, folder, output, *, approve):
                             raise ValueError(f"Неверная ориентация страницы PDF {item['physical']}.")
         with (result / "Страницы КП.csv").open("w", newline="", encoding="utf-8-sig") as stream:
             writer = csv.writer(stream, delimiter=";")
-            writer.writerow(["Раздел", "Файл КП", "Страница КП", "Страница PDF", "Номер на листе", "PNG"])
+            writer.writerow(["Раздел", "Файл КП", "Страница КП", "Страница PDF", "Номер на листе", "Изображение"])
             for (offer, number, image), page in zip(rows, pages, strict=True):
                 writer.writerow([page["section"], offer, number, page["physical"],
                                  page["printed"], str(image.relative_to(result))])
@@ -653,13 +1084,15 @@ def main():
     parser.add_argument("docx", type=Path, nargs="?")
     parser.add_argument("folder", type=Path, nargs="?", help="Папка прайс-листов или одного раздела")
     parser.add_argument("-o", "--output", type=Path, help="Новая папка результата")
+    parser.add_argument("--xlsx", type=Path, help="Книга сводной таблицы")
     parser.add_argument("-y", "--yes", action="store_true", help="Собрать показанный список без подтверждения")
     args = parser.parse_args()
     try:
         docx = args.docx or Path(input("Путь к основному DOCX: ").strip().strip('"'))
         folder = args.folder or Path(input("Путь к папке прайс-листов или раздела: ").strip().strip('"'))
         output = args.output or Path(input("Путь к новой папке результата: ").strip().strip('"'))
-        assemble(docx.resolve(), folder.resolve(), output.resolve(), approve=args.yes)
+        assemble(docx.resolve(), folder.resolve(), output.resolve(), approve=args.yes,
+                 workbook=args.xlsx.resolve() if args.xlsx else None)
     except (OSError, ValueError, subprocess.SubprocessError, EOFError) as error:
         print(f"Ошибка: {error}", file=sys.stderr)
         return 1

@@ -14,7 +14,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libreoffice-writer python3-uno fonts-liberation fonts-crosextra-carlito fonts-crosextra-caladea \
+    libreoffice-writer libreoffice-calc python3-uno fonts-liberation fonts-crosextra-carlito fonts-crosextra-caladea \
     tesseract-ocr tesseract-ocr-osd tesseract-ocr-rus \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 portal \

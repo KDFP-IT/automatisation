@@ -15,7 +15,6 @@ from threading import Event, Lock, Thread, Timer
 import time
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
-from zipfile import ZipFile
 from email.header import decode_header, make_header
 
 from flask import Flask, Response, jsonify, request, send_file, send_from_directory, session
@@ -25,7 +24,7 @@ UI = ROOT / "static" / "ui"
 SECTION = re.compile(r"Раздел\s+(\d+)\s*[-–—]\s*\S.*", re.IGNORECASE)
 WINDOWS_RESERVED = re.compile(r"(?:CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])(?:\.|$)", re.I)
 DOWNLOADS = {"pdf": ("result.pdf", "КАЦ — готовый комплект.pdf"),
-             "zip": ("images.zip", "КАЦ — картинки по разделам.zip")}
+             "xlsx": ("prepared.xlsx", "КАЦ — сводная таблица.xlsx")}
 TTL = 3600
 
 
@@ -77,7 +76,7 @@ def create_kac_app():
     app.config.update(SECRET_KEY=secrets.token_hex(32), SESSION_COOKIE_NAME="portal_kac",
                       SESSION_COOKIE_PATH="/kac/", SESSION_COOKIE_SAMESITE="Lax",
                       SESSION_COOKIE_SECURE=os.getenv("PDF_WEB_HTTPS") == "1",
-                      MAX_CONTENT_LENGTH=200 * 1024 * 1024, MAX_FORM_PARTS=501)
+                      MAX_CONTENT_LENGTH=200 * 1024 * 1024, MAX_FORM_PARTS=502)
     available = os.name == "nt" or (
         os.getenv("KAC_LOCAL_EXPORT") == "1" and shutil.which("soffice") is not None
     )
@@ -124,9 +123,11 @@ def create_kac_app():
             offers = folder / "offers"
             if len(sections) == 1:
                 offers /= next(iter(sections.values()))
+            workbook = folder / "summary.xlsx"
+            workbook_args = ["--xlsx", str(workbook)] if workbook.is_file() else []
             process = subprocess.Popen(
                 [sys.executable, "-u", str(worker), str(folder / "source.docx"), str(offers),
-                 "-o", str(result), "--yes"],
+                 "-o", str(result), "--yes", *workbook_args],
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                 encoding="utf-8", errors="replace",
                 env={**os.environ, "PYTHONIOENCODING": "utf-8"},
@@ -168,14 +169,14 @@ def create_kac_app():
                     raise ValueError(detail.removeprefix("Ошибка: "))
                 raise RuntimeError("KAC export failed")
             next(result.glob("*.pdf")).replace(folder / "result.pdf")
+            prepared = result / "summary.xlsx"
+            if prepared.is_file():
+                prepared.replace(folder / "prepared.xlsx")
             with (result / "Страницы КП.csv").open(encoding="utf-8-sig", newline="") as stream:
                 rows = list(csv.reader(stream, delimiter=";"))[1:]
-            with ZipFile(folder / "images.zip", "w") as archive:
-                for section, *_, image_path in rows:
-                    path = result / image_path
-                    archive.write(path, f"{sections[int(section)]}/{path.name}")
             status = {"status": "done", "stage": "done", "progress": 1.0,
-                      "pages": len(rows), "sections": len(sections)}
+                      "pages": len(rows), "sections": len(sections),
+                      "has_xlsx": (folder / "prepared.xlsx").is_file()}
         except ValueError as error:
             status = {"status": "error", "error": str(error)}
         except subprocess.TimeoutExpired:
@@ -186,6 +187,7 @@ def create_kac_app():
         finally:
             try:
                 (folder / "source.docx").unlink(missing_ok=True)
+                (folder / "summary.xlsx").unlink(missing_ok=True)
             except OSError:
                 app.logger.exception("Could not remove KAC source")
             for name in ("offers", "result"):
@@ -229,7 +231,7 @@ def create_kac_app():
     def forward_to_worker():
         if not upstream or not upstream.hostname:
             return None
-        if not re.fullmatch(r"/api/(?:health|jobs(?:/[a-f0-9]{32}(?:/pdf|/zip)?)?)", request.path):
+        if not re.fullmatch(r"/api/(?:health|jobs(?:/[a-f0-9]{32}(?:/(?:pdf|xlsx))?)?)", request.path):
             return None
         connection_type = HTTPSConnection if upstream.scheme == "https" else HTTPConnection
         connection = connection_type(upstream.hostname, upstream.port, timeout=60)
@@ -267,6 +269,9 @@ def create_kac_app():
         if not available:
             return jsonify(error="Обработчик КАЦ недоступен."), 503
         document = request.files.get("docx")
+        workbook = request.files.get("xlsx")
+        if workbook and not workbook.filename.lower().endswith(".xlsx"):
+            return jsonify(error="Выберите сводную таблицу в формате XLSX."), 400
         offers = request.files.getlist("offer")
         template_exists = template is not None and template.is_file()
         if not offers or (document and not document.filename.lower().endswith(".docx")) or (
@@ -304,6 +309,8 @@ def create_kac_app():
                 document.save(source)
             else:
                 shutil.copyfile(template, source)
+            if workbook:
+                workbook.save(folder / "summary.xlsx")
             for (section, _), (name, offer) in files.items():
                 directory = folder / "offers" / sections[section]
                 directory.mkdir(parents=True, exist_ok=True)
@@ -326,10 +333,12 @@ def create_kac_app():
                 if kind is None:
                     return {k: v for k, v in job.items() if k not in {"owner", "finished", "audit_user", "audit_name", "started"}}
                 if job["status"] == "done" and kind in DOWNLOADS:
+                    file, name = DOWNLOADS[kind]
+                    if not (root / key / file).is_file():
+                        return jsonify(error="Файл отсутствует в этом комплекте."), 404
                     audit_event("download", job.get("audit_user") or request.headers.get("X-Auth-User", ""),
                                 app.logger, user_name=job.get("audit_name") or auth_display_name(request.headers.get("X-Auth-Name", "")),
                                 details={"kind": kind})
-                    file, name = DOWNLOADS[kind]
                     inline = kind == "pdf" and request.args.get("inline") == "1"
                     return send_file(root / key / file, as_attachment=not inline, download_name=name)
         return jsonify(error="Задание недоступно. Загрузите файлы заново."), 404
