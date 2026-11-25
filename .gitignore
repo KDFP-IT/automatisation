@@ -4,6 +4,7 @@ __pycache__/
 node_modules/
 .electron/
 .env
+deploy/litellm/open-webui.env
 *.local.json
 *.sqlite*
 *.db

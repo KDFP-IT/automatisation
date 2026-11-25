@@ -1,0 +1,14 @@
+model_list:
+  - model_name: tencent/hy4-flash
+    litellm_params:
+      model: openai/tencent/hy4-flash
+      api_key: os.environ/ROUTERAI_API_KEY
+      api_base: os.environ/ROUTERAI_API_BASE_URL
+
+litellm_settings:
+  callbacks: ["arize_phoenix"]
+
+general_settings:
+  user_header_mappings:
+    - header_name: X-OpenWebUI-User-Id
+      litellm_user_role: internal_user

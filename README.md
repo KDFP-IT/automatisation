@@ -17,4 +17,6 @@ GitHub Actions собирает и проверяет КАЦ при измене
 
 В [deploy/portal](deploy/portal) лежат Compose, меню и маршруты. Базы, рабочие документы и конфигурации с секретами хранятся вне Git. На действующем сервере сохраняйте имя Compose-проекта и привязки томов при обновлениях, включая `portal-data` калькулятора.
 
+[deploy/litellm](deploy/litellm) — OpenAI-совместимый шлюз Open WebUI → RouterAI с трассировкой в Arize Phoenix. Compose, модель, секреты и порядок отката описаны в каталоге.
+
 Общие токены оформления — [packages/tokens/tokens.css](packages/tokens/tokens.css). Интерфейс КАЦ подключает их копией `apps/kac/ui/src/assets/tokens.css` (импорт в `main.css`); совпадение копии с каноном проверяет `npm test` в `apps/kac/ui`. Остальные инструменты переходят на токены по мере переноса интерфейса на Vue.
