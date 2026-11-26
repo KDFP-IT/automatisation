@@ -37,7 +37,7 @@ const canSubmit = computed(() => Boolean(
 ))
 const ignoredTotal = computed(() => (
   analysis.value.ignored.reduce((sum, group) => sum + group.count, 0)
-  + analysis.value.skipped.length
+  + analysis.value.letters.length
 ))
 
 const stageLabel = computed(() => {
@@ -326,7 +326,7 @@ onMounted(async () => {
           </template>
 
           <section
-            v-if="analysis.ignored.length || analysis.skipped.length"
+            v-if="ignoredTotal || analysis.skipped.length"
             class="mt-6 rounded-xl border border-default bg-elevated p-4"
           >
             <div class="flex items-start gap-3">
@@ -334,6 +334,9 @@ onMounted(async () => {
               <div class="min-w-0">
                 <p class="text-sm font-medium text-highlighted">Не попадёт в сборку · {{ ignoredTotal }} файлов</p>
                 <ul class="mt-2 space-y-1 text-sm">
+                  <li v-for="path in analysis.letters" :key="path" class="break-all">
+                    {{ path }} — информационное письмо
+                  </li>
                   <li v-for="group in analysis.ignored" :key="group.folder">
                     <span class="break-all text-default">{{ group.folder }}</span>
                     <span class="text-muted"> — {{ group.count }} PDF в подпапке</span>

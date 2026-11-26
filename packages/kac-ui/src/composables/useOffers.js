@@ -1,5 +1,6 @@
-const SECTION = /^Раздел\s+(\d+)\s*[-–—]\s*(\S.*)$/i
-const OFFER = /^КП\s*(\d+)\s*\.\s*(\d+)(?![\d.])/i
+const SECTION = /^(?:Раздел\s+|Прайс[-–‑ ]листы\s+к\s+разделу\s+КАЦ\s*№\s*)(\d+)\s*[-–—]\s*(\S.*)$/i
+const OFFER = /^КП\s*(\d+(?:\s*\.\s*\d+)+)(?![\d.])/i
+const INFO_LETTER = /^Информационное\s+письмо(?:\s|[.\-–—]|$)/i
 const MAX_DEPTH = 4
 
 export function emptyAnalysis() {
@@ -8,6 +9,7 @@ export function emptyAnalysis() {
     sections: [],
     totals: { sections: 0, pdfs: 0 },
     ignored: [],
+    letters: [],
     skipped: [],
     issues: []
   }
@@ -49,6 +51,11 @@ export function analyse(files) {
       continue
     }
 
+    if (INFO_LETTER.test(name)) {
+      result.letters.push(entry.path)
+      continue
+    }
+
     const number = Number(parent[1])
     const title = parent[2]
     const folder = parts[parts.length - 2]
@@ -64,7 +71,7 @@ export function analyse(files) {
       result.issues.push(`Раздел ${number} встречается в двух папках: «${node.folder}» и «${folder}».`)
       continue
     }
-    const key = `${Number(offer[1])}.${Number(offer[2])}`
+    const key = offer[1].split('.').map(Number).join('.')
     const duplicate = node.files.find(file => file.key === key)
     if (duplicate) {
       result.issues.push(`В разделе ${number} два КП №${key}: «${duplicate.name}» и «${name}».`)
@@ -113,9 +120,12 @@ function sectionAncestor(parts) {
 }
 
 function compareOffers(first, second) {
-  const [firstMajor, firstMinor] = first.key.split('.').map(Number)
-  const [secondMajor, secondMinor] = second.key.split('.').map(Number)
-  return firstMajor - secondMajor || firstMinor - secondMinor
+  const a = first.key.split('.').map(Number)
+  const b = second.key.split('.').map(Number)
+  for (let i = 0; i < Math.min(a.length, b.length); i++) {
+    if (a[i] !== b[i]) return a[i] - b[i]
+  }
+  return a.length - b.length
 }
 
 export async function collectEntry(entry, depth = 1) {

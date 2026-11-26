@@ -4,6 +4,19 @@ import { analyse } from '../src/composables/useOffers.js'
 
 const entry = path => ({ path, file: { name: path.split('/').at(-1), size: 1024 } })
 
+test('accepts the project appendix folders, skips letters and sorts nested КП numbers', () => {
+  const folder = 'Сметный/ПРАЙС-ЛИСТЫ К РАЗДЕЛУ КАЦ №11-МОСТ ТКР2'
+  const letter = folder + '/Информационное письмо о смене адреса.pdf'
+  const result = analyse([
+    entry('Сметный/Смета.docx'), entry(letter),
+    ...['3.1.10', '3.10', '3.1.2', '3.1'].map(n => entry(folder + '/КП ' + n + ' Мост.pdf'))
+  ])
+  assert.deepEqual(result.issues, [])
+  assert.deepEqual(result.letters, [letter])
+  assert.equal(result.docx.name, 'Смета.docx')
+  assert.deepEqual(result.sections[0].files.map(f => f.key), ['3.1', '3.1.2', '3.1.10', '3.10'])
+})
+
 test('groups PDFs by section and sorts offers by number', () => {
   const result = analyse([
     entry('Проект/Раздел 2 - Сеть/КП 2.1 Подстанция.pdf'),

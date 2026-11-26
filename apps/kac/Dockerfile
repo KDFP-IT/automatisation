@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && install -d -o 10001 -g 10001 /data
 COPY apps/kac/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
-COPY apps/kac/app.py apps/kac/serve.py apps/kac/assemble.py apps/kac/export-libreoffice.py ./
+COPY apps/kac/app.py apps/kac/serve.py apps/kac/assemble.py apps/kac/kac_names.py apps/kac/export-libreoffice.py ./
 COPY --from=ui /app/apps/kac/static/ui ./static/ui
 
 USER 10001:10001

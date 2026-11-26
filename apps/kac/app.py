@@ -19,10 +19,10 @@ from zipfile import ZipFile
 from email.header import decode_header, make_header
 
 from flask import Flask, Response, jsonify, request, send_file, send_from_directory, session
+from kac_names import SECTION_NAME
 
 ROOT = Path(__file__).resolve().parent
 UI = ROOT / "static" / "ui"
-SECTION = re.compile(r"Раздел\s+(\d+)\s*[-–—]\s*\S.*", re.IGNORECASE)
 WINDOWS_RESERVED = re.compile(r"(?:CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])(?:\.|$)", re.I)
 DOWNLOADS = {"pdf": ("result.pdf", "КАЦ — готовый комплект.pdf"),
              "zip": ("images.zip", "КАЦ — картинки по разделам.zip")}
@@ -50,7 +50,7 @@ def upload_path(name):
     ):
         raise ValueError("Проверьте имена папок и файлов КП.")
     folder, filename = parts[-2:]
-    section = SECTION.fullmatch(folder)
+    section = SECTION_NAME.fullmatch(folder)
     if section is None or not filename.lower().endswith(".pdf"):
         raise ValueError("КП должны лежать в папках вида «Раздел 1 - Контактная сеть».")
     return int(section[1]), folder, filename, "/".join(parts[:-1])

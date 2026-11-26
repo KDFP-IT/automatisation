@@ -19,6 +19,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 import pypdfium2 as pdfium
 from lxml import etree as xml
 from PIL import Image, ImageOps
+from kac_names import INFO_LETTER, OFFER_NAME, PRICE_LIST, SECTION_NAME
 
 
 NS = {
@@ -33,9 +34,7 @@ NS = {
 DOCUMENT = "word/document.xml"
 RELATIONSHIPS = "word/_rels/document.xml.rels"
 CONTENT_TYPES = "[Content_Types].xml"
-OFFER_NAME = re.compile(r"^КП\s*(\d+)\s*\.\s*(\d+)(?![\d.])", re.IGNORECASE)
-DIVIDER = re.compile(r"^ПРАЙС[-–‑]ЛИСТЫ\s+К\s+РАЗДЕЛУ\s+КАЦ\s*№\s*(\d+)\b", re.IGNORECASE)
-SECTION_NAME = re.compile(r"^Раздел\s+(\d+)\s*[-–—]\s*(\S.*)$", re.IGNORECASE)
+DIVIDER = re.compile(rf"^{PRICE_LIST}(\d+)\b", re.I)
 
 
 def qname(prefix, name):
@@ -45,12 +44,12 @@ def qname(prefix, name):
 def section_offers(folder):
     offers = {}
     for path in folder.iterdir():
-        if not path.is_file() or path.suffix.lower() != ".pdf":
+        if not path.is_file() or path.suffix.lower() != ".pdf" or INFO_LETTER.match(path.name):
             continue
         offer = OFFER_NAME.match(path.stem)
         if not offer:
             raise ValueError(f"Не найден номер КП в имени «{path.name}».")
-        number = tuple(map(int, offer.groups()))
+        number = tuple(map(int, offer[1].split(".")))
         if number in offers:
             raise ValueError(f"Одинаковые номера КП: «{offers[number].name}» и «{path.name}».")
         offers[number] = path
@@ -173,6 +172,58 @@ def continue_duplicate_numbering(divider):
         del numbering.attrib[start]
 
 
+def normalize_price_list_appendix(first, titles):
+    """Convert manually paginated offer sheets in the working copy to one block per heading."""
+    body = first.getparent()
+    appendix = list(body)[body.index(first):-1]
+    headings = {}
+    for paragraph in appendix:
+        if paragraph.tag != qname("w", "p"):
+            raise ValueError("В приложении КП встретилась таблица или другой отдельный объект.")
+        text = paragraph_text(paragraph)
+        heading = DIVIDER.match(text)
+        if text and not heading:
+            raise ValueError("В приложении КП есть текст вне разделителя. Сборка остановлена для его сохранения.")
+        # Only replace ordinary picture runs, page breaks and empty paragraphs.
+        for child in paragraph:
+            if child.tag in {qname("w", tag) for tag in ("pPr", "bookmarkStart", "bookmarkEnd")}:
+                continue
+            if child.tag != qname("w", "r"):
+                raise ValueError("В приложении КП есть неподдерживаемая разметка абзаца.")
+            for item in child:
+                if item.tag in {qname("w", tag) for tag in ("rPr", "t", "br", "lastRenderedPageBreak")}:
+                    continue
+                if item.tag == qname("w", "drawing") and item.find(
+                    "wp:inline/a:graphic/a:graphicData/{http://schemas.openxmlformats.org/drawingml/2006/picture}pic",
+                    NS,
+                ) is not None:
+                    continue
+                raise ValueError("В приложении КП есть объект, который нельзя заменить страницей предложения.")
+        if heading:
+            number = int(heading[1])
+            if number in headings or number not in titles:
+                raise ValueError(f"Проверьте разделитель №{number} и соответствующую папку КП.")
+            headings[number] = paragraph
+
+    for paragraph in appendix:
+        body.remove(paragraph)
+    for heading in headings.values():
+        for drawing in heading.findall("w:r/w:drawing", NS):
+            drawing.getparent().remove(drawing)
+        props = heading.find("w:pPr", NS)
+        if props is None:
+            props = xml.Element(qname("w", "pPr"))
+            heading.insert(0, props)
+        if props.find("w:sectPr", NS) is None:
+            props.append(deepcopy(first.find("w:pPr/w:sectPr", NS)))
+        style = first.find("w:pPr/w:pStyle", NS)
+        if style is not None and props.find("w:pStyle", NS) is None:
+            props.insert(0, deepcopy(style))
+        body[-1].addprevious(heading)
+        body[-1].addprevious(xml.Element(qname("w", "p")))
+    return headings
+
+
 def prepare_layout(document, titles, single):
     dividers = find_dividers(document)
     if single:
@@ -195,8 +246,11 @@ def prepare_layout(document, titles, single):
     first = next(iter(dividers.values()))
     pairs = {number: (divider, divider.getnext()) for number, divider in dividers.items()}
     expected = [node for pair in pairs.values() for node in pair] + [tail]
-    if tail.tag != qname("w", "sectPr") or list(body)[body.index(first):] != expected:
-        raise ValueError("После первого разделителя ожидаются только пары «разделитель и страницы КП».")
+    if tail.tag != qname("w", "sectPr"):
+        raise ValueError("В Word отсутствуют завершающие параметры страницы.")
+    if list(body)[body.index(first):] != expected:
+        dividers = normalize_price_list_appendix(first, titles)
+        pairs = {number: (divider, divider.getnext()) for number, divider in dividers.items()}
     continue_duplicate_numbering(first)
     first_section = first.find("w:pPr/w:sectPr", NS)
     initial_numbering = deepcopy(first_section.find("w:pgNumType", NS))
