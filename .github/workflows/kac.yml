@@ -34,7 +34,7 @@ jobs:
       - name: Build only KAC
         run: docker build --platform linux/amd64 -f apps/kac/Dockerfile -t "$IMAGE" .
       - name: Test KAC document assembly
-        run: docker run --rm -v "$PWD/apps/kac:/test:ro" -w /test --entrypoint python "$IMAGE" -B -m unittest -v test_assemble_empty_blocks
+        run: docker run --rm -v "$PWD/apps/kac:/test:ro" -w /test --entrypoint python "$IMAGE" -B -m unittest discover -v
       - name: Check KAC HTTP and document tools
         run: bash apps/kac/smoke-test.sh "$IMAGE"
       - name: Export image for manual deployment

@@ -406,7 +406,7 @@ def fitted_png(path, extent):
 
 
 def write_document(source, target, titles, sections, single):
-    with ZipFile(source) as archive:
+    with ZipFile(source) as archive, ZipFile(target, "w", ZIP_DEFLATED) as output:
         document = xml.fromstring(archive.read(DOCUMENT))
         relationships = xml.fromstring(archive.read(RELATIONSHIPS))
         content_types = xml.fromstring(archive.read(CONTENT_TYPES))
@@ -414,7 +414,6 @@ def write_document(source, target, titles, sections, single):
         existing_ids = {item.get("Id") for item in relationships}
         shape_id = max(int(item.get("id")) for item in document.findall(".//wp:docPr", NS))
         existing_parts = set(archive.namelist())
-        images = {}
         for section, rows in sections.items():
             block, old_runs = layout[section]
             linux = sys.platform == "linux"
@@ -434,7 +433,7 @@ def write_document(source, target, titles, sections, single):
                     run, section, index, shape_id, offer, page, png,
                     relationships, existing_ids, existing_parts,
                 )
-                images[image_part] = data
+                output.writestr(image_part, data)
                 block.append(run)
             if linux:
                 separate_offer_paragraphs(block, landscape, page_style)
@@ -443,14 +442,14 @@ def write_document(source, target, titles, sections, single):
             xml.SubElement(content_types, qname("ct", "Default"),
                            Extension="png", ContentType="image/png")
         updated = {DOCUMENT: document, RELATIONSHIPS: relationships, CONTENT_TYPES: content_types}
-        with ZipFile(target, "w", ZIP_DEFLATED) as output:
-            for part in archive.infolist():
-                data = (xml.tostring(updated[part.filename], encoding="UTF-8", xml_declaration=True,
-                                     standalone=True)
-                        if part.filename in updated else archive.read(part))
+        for part in archive.infolist():
+            if part.filename in updated:
+                data = xml.tostring(updated[part.filename], encoding="UTF-8",
+                                    xml_declaration=True, standalone=True)
                 output.writestr(part.filename, data)
-            for name, data in images.items():
-                output.writestr(name, data)
+            else:
+                with archive.open(part) as src, output.open(part.filename, "w", force_zip64=part.file_size >= 2**31) as dst:
+                    shutil.copyfileobj(src, dst)
 
 
 def offer_section(block):

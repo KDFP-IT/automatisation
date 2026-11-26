@@ -3,38 +3,60 @@ import { ref } from 'vue'
 const api = '/kac/api'
 const pause = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds))
 
+const chunkBytes = 512 * 1024
+
 async function request(url, options) {
   const response = await fetch(url, options)
   const data = await response.json().catch(() => ({}))
   if (!response.ok) {
-    throw new Error(data.error ?? (response.status === 413
-      ? 'Объём загрузки превышает 200 МБ.'
+    const error = new Error(data.error ?? (response.status === 413
+      ? 'Прокси отклонил часть загрузки.'
       : 'Портал не ответил. Попробуйте ещё раз.'))
+    error.status = response.status
+    throw error
   }
   return data
 }
 
-function upload(url, body, onProgress) {
-  return new Promise((resolve, reject) => {
-    const request = new XMLHttpRequest()
-    request.open('POST', url)
-    request.responseType = 'json'
-    request.upload.addEventListener('progress', event => {
-      if (event.lengthComputable) onProgress(event.loaded / event.total)
-    })
-    request.addEventListener('load', () => {
-      const data = request.response ?? {}
-      if (request.status >= 200 && request.status < 300) {
-        resolve(data)
-      } else {
-        reject(new Error(data.error ?? (request.status === 413
-          ? 'Объём загрузки превышает 200 МБ.'
-          : 'Портал не ответил. Попробуйте ещё раз.')))
-      }
-    })
-    request.addEventListener('error', () => reject(new Error('Портал не ответил. Попробуйте ещё раз.')))
-    request.send(body)
+async function postPart(url, body) {
+  // A lost acknowledgment must not append the same data or start a second job.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await request(url, { method: 'POST', body })
+    } catch (error) {
+      if (attempt >= 2 || (error.status && error.status < 500)) throw error
+      await pause(500 * (attempt + 1))
+    }
+  }
+}
+
+async function upload(docx, offers, onProgress) {
+  const files = offers.map(({ file, path }) => ({ file, path, kind: 'offer' }))
+  if (docx) files.unshift({ file: docx, path: docx.name, kind: 'docx' })
+  const total = files.reduce((sum, entry) => sum + entry.file.size, 0)
+  const { id } = await request(`${api}/uploads`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ files: files.length })
   })
+  const base = `${api}/uploads/${id}`
+  let sent = 0
+  for (const [index, { file, path, kind }] of files.entries()) {
+    let offset = 0
+    do {
+      const chunk = file.slice(offset, offset + chunkBytes)
+      const body = new FormData()
+      body.append('kind', kind)
+      body.append('index', String(index))
+      body.append('offset', String(offset))
+      body.append('total', String(file.size))
+      body.append('chunk', chunk, path)
+      await postPart(`${base}/chunk`, body)
+      offset += chunk.size
+      sent += chunk.size
+      onProgress(total ? sent / total : 1)
+    } while (offset < file.size)
+  }
+  return postPart(`${base}/finish`)
 }
 
 export function loadHealth() {
@@ -53,10 +75,7 @@ export function useKacJob() {
     stage.value = 'upload'
     job.value = null
     try {
-      const body = new FormData()
-      if (docx) body.append('docx', docx)
-      for (const { file, path } of offers) body.append('offer', file, path)
-      const { id } = await upload(`${api}/jobs`, body, fraction => {
+      const { id } = await upload(docx, offers, fraction => {
         progress.value = Math.round(fraction * 15)
       })
       stage.value = 'queued'

@@ -19,11 +19,10 @@ from zipfile import ZipFile
 from email.header import decode_header, make_header
 
 from flask import Flask, Response, jsonify, request, send_file, send_from_directory, session
-from kac_names import SECTION_NAME
+from uploads import Upload, upload_path
 
 ROOT = Path(__file__).resolve().parent
 UI = ROOT / "static" / "ui"
-WINDOWS_RESERVED = re.compile(r"(?:CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])(?:\.|$)", re.I)
 DOWNLOADS = {"pdf": ("result.pdf", "КАЦ — готовый комплект.pdf"),
              "zip": ("images.zip", "КАЦ — картинки по разделам.zip")}
 TTL = 3600
@@ -40,20 +39,6 @@ def auth_display_name(value):
     except Exception:
         return value or ""
 
-
-def upload_path(name):
-    parts = name.split("/")
-    if len(parts) not in (2, 3, 4) or any(
-        not part or part in {".", ".."} or part[-1] in ". " or len(part) > 160
-        or re.search(r'[<>:"\\|?*\x00-\x1f]', part) or WINDOWS_RESERVED.match(part)
-        for part in parts
-    ):
-        raise ValueError("Проверьте имена папок и файлов КП.")
-    folder, filename = parts[-2:]
-    section = SECTION_NAME.fullmatch(folder)
-    if section is None or not filename.lower().endswith(".pdf"):
-        raise ValueError("КП должны лежать в папках вида «Раздел 1 - Контактная сеть».")
-    return int(section[1]), folder, filename, "/".join(parts[:-1])
 
 AUDIT_URL = os.environ.get("AUDIT_URL", "http://audit:8080")
 
@@ -77,7 +62,7 @@ def create_kac_app():
     app.config.update(SECRET_KEY=secrets.token_hex(32), SESSION_COOKIE_NAME="portal_kac",
                       SESSION_COOKIE_PATH="/kac/", SESSION_COOKIE_SAMESITE="Lax",
                       SESSION_COOKIE_SECURE=os.getenv("PDF_WEB_HTTPS") == "1",
-                      MAX_CONTENT_LENGTH=200 * 1024 * 1024, MAX_FORM_PARTS=501)
+                      MAX_FORM_PARTS=None)
     available = os.name == "nt" or (
         os.getenv("KAC_LOCAL_EXPORT") == "1" and shutil.which("soffice") is not None
     )
@@ -91,6 +76,7 @@ def create_kac_app():
     template = Path(configured_template).resolve() if configured_template else None
     root = Path(os.getenv("PDF_WEB_DATA_DIR", str(ROOT / "data"))).resolve() / "kac-jobs"
     jobs = {}
+    uploads = {}
     lock = Lock()
     pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="kac")
     stop = Event()
@@ -101,12 +87,15 @@ def create_kac_app():
             with lock:
                 for folder in root.iterdir():
                     job = jobs.get(folder.name)
+                    upload = uploads.get(folder.name)
+                    touched = (upload.touched if upload else
+                               job.get("finished", time.time()) if job else folder.stat().st_mtime)
                     if (folder.is_dir() and re.fullmatch(r"[a-f0-9]{32}", folder.name)
-                            and time.time() - (job.get("finished", time.time()) if job
-                                               else folder.stat().st_mtime) > TTL):
+                            and time.time() - touched > TTL):
                         shutil.rmtree(folder, ignore_errors=True)
                         if not folder.exists():
                             jobs.pop(folder.name, None)
+                            uploads.pop(folder.name, None)
 
     if available:
         root.mkdir(parents=True, exist_ok=True)
@@ -215,7 +204,7 @@ def create_kac_app():
 
     @app.errorhandler(413)
     def too_large(_):
-        return jsonify(error="За один раз можно загрузить до 500 PDF общим объёмом до 200 МБ вместе с DOCX."), 413
+        return jsonify(error="Сервер отклонил размер запроса загрузки."), 413
 
     @app.get("/")
     def index():
@@ -229,7 +218,7 @@ def create_kac_app():
     def forward_to_worker():
         if not upstream or not upstream.hostname:
             return None
-        if not re.fullmatch(r"/api/(?:health|jobs(?:/[a-f0-9]{32}(?:/pdf|/zip)?)?)", request.path):
+        if not re.fullmatch(r"/api/(?:health|jobs(?:/[a-f0-9]{32}(?:/pdf|/zip)?)?|uploads(?:/[a-f0-9]{32}/(?:chunk|finish))?)", request.path):
             return None
         connection_type = HTTPSConnection if upstream.scheme == "https" else HTTPConnection
         connection = connection_type(upstream.hostname, upstream.port, timeout=60)
@@ -262,6 +251,76 @@ def create_kac_app():
     def health():
         return {"available": available, "template": template.name if template and template.is_file() else None}
 
+    def register_job(key, owner):
+        jobs[key] = {"owner": owner, "status": "queued", "stage": "queued", "progress": 0.05,
+                     "audit_user": request.headers.get("X-Auth-User", ""),
+                     "audit_name": auth_display_name(request.headers.get("X-Auth-Name", "")),
+                     "started": time.time()}
+
+    @app.post("/api/uploads")
+    def begin_upload():
+        if not available:
+            return jsonify(error="Обработчик КАЦ недоступен."), 503
+        request.max_content_length = 1024
+        data = request.get_json(silent=True)
+        count = data.get("files") if isinstance(data, dict) else None
+        if type(count) is not int or count < 1:
+            return jsonify(error="Выберите файлы для загрузки."), 400
+        owner = session.setdefault("owner", secrets.token_hex(16))
+        key = secrets.token_hex(16)
+        with lock:
+            folder = root / key
+            folder.mkdir()
+            uploads[key] = Upload(folder, owner, count)
+        return jsonify(id=key), 201
+
+    @app.post("/api/uploads/<key>/chunk")
+    def upload_chunk(key):
+        # Browser sends at most 512 KiB of file data plus multipart metadata.
+        request.max_content_length = 1024 * 1024
+        chunk = request.files.get("chunk")
+        if chunk is None:
+            return jsonify(error="Отсутствует часть файла."), 400
+        with lock:
+            transfer = uploads.get(key)
+            if not transfer or transfer.owner != session.get("owner"):
+                return jsonify(error="Загрузка недоступна. Выберите папку заново."), 404
+            try:
+                transfer.append(int(request.form["index"]), int(request.form["offset"]),
+                                int(request.form["total"]), request.form["kind"],
+                                chunk.filename or "", chunk.stream)
+            except (KeyError, ValueError) as error:
+                return jsonify(error=str(error)), 400
+            transfer.touched = time.time()
+            return jsonify(index=transfer.next_file, offset=transfer.offset)
+
+    @app.post("/api/uploads/<key>/finish")
+    def finish_upload(key):
+        owner = session.get("owner")
+        with lock:
+            if key in jobs and jobs[key]["owner"] == owner:
+                return jsonify(id=key), 202
+            transfer = uploads.get(key)
+            if not transfer or transfer.owner != owner:
+                return jsonify(error="Загрузка недоступна. Выберите папку заново."), 404
+            if transfer.next_file != transfer.count or not transfer.sections:
+                return jsonify(error="Комплект ещё не загружен полностью."), 400
+            if sum("finished" not in job for job in jobs.values()) >= 4:
+                return jsonify(error="Очередь заполнена. Повторите после завершения сборки."), 429
+            source = transfer.folder / "source.docx"
+            if not source.is_file():
+                if not template or not template.is_file():
+                    return jsonify(error="Выберите основной DOCX."), 400
+                shutil.copyfile(template, source)
+            register_job(key, owner)
+            try:
+                pool.submit(run_job, key, transfer.sections)
+            except RuntimeError:
+                jobs.pop(key)
+                raise
+            del uploads[key]
+        return jsonify(id=key), 202
+
     @app.post("/api/jobs")
     def upload():
         if not available:
@@ -293,10 +352,7 @@ def create_kac_app():
         with lock:
             if sum("finished" not in job for job in jobs.values()) >= 4:
                 return jsonify(error="Очередь заполнена. Повторите после завершения сборки."), 429
-            jobs[key] = {"owner": owner, "status": "queued", "stage": "queued", "progress": 0.05,
-                         "audit_user": request.headers.get("X-Auth-User", ""),
-                         "audit_name": auth_display_name(request.headers.get("X-Auth-Name", "")),
-                         "started": time.time()}
+            register_job(key, owner)
         try:
             folder.mkdir()
             source = folder / "source.docx"
