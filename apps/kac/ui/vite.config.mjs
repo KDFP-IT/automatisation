@@ -29,7 +29,9 @@ export default defineConfig({
             'lucide:triangle-alert',
             'lucide:upload',
             'lucide:x',
-            'vscode-icons:file-type-word'
+            'vscode-icons:file-type-word',
+            'vscode-icons:file-type-excel',
+            'lucide:file-spreadsheet'
           ]
         }
       }

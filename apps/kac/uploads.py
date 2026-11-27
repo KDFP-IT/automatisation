@@ -55,6 +55,10 @@ class Upload:
             raise ValueError("Пропущена часть файла.")
         if kind == "docx" and index == 0 and name.lower().endswith(".docx"):
             target = self.folder / "source.docx"
+        elif kind == "xlsx" and name.lower().endswith(".xlsx"):
+            target = self.folder / "summary.xlsx"
+            if offset == 0 and target.exists() and self.current is None:
+                raise ValueError("Можно загрузить только одну сводную таблицу XLSX.")
         elif kind == "offer":
             section, directory, filename, relative = upload_path(name)
             if self.section_paths.get(section, relative) != relative:

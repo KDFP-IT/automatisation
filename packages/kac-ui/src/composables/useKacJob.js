@@ -30,8 +30,9 @@ async function postPart(url, body) {
   }
 }
 
-async function upload(docx, offers, onProgress) {
+async function upload(docx, xlsx, offers, onProgress) {
   const files = offers.map(({ file, path }) => ({ file, path, kind: 'offer' }))
+  if (xlsx) files.unshift({ file: xlsx, path: xlsx.name, kind: 'xlsx' })
   if (docx) files.unshift({ file: docx, path: docx.name, kind: 'docx' })
   const total = files.reduce((sum, entry) => sum + entry.file.size, 0)
   const { id } = await request(`${api}/uploads`, {
@@ -69,13 +70,13 @@ export function useKacJob() {
   const stage = ref('')
   const job = ref(null)
 
-  async function run({ docx, offers }) {
+  async function run({ docx, xlsx, offers }) {
     busy.value = true
     progress.value = 0
     stage.value = 'upload'
     job.value = null
     try {
-      const { id } = await upload(docx, offers, fraction => {
+      const { id } = await upload(docx, xlsx, offers, fraction => {
         progress.value = Math.round(fraction * 15)
       })
       stage.value = 'queued'

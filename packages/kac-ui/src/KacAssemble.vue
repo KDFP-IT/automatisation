@@ -8,6 +8,9 @@ const foldersInput = ref()
 const docxInput = ref()
 
 const docxFile = ref()
+const xlsxFile = ref()
+const xlsxInput = ref()
+const xlsxDragActive = ref(false)
 const analysis = ref(emptyAnalysis())
 const configuredTemplate = ref()
 const available = ref(true)
@@ -80,6 +83,17 @@ function onDocx(event) {
   event.target.value = ''
 }
 
+function selectXlsx(files) {
+  const file = files?.[0]
+  if (!file) return
+  if (!/\.xlsx$/i.test(file.name)) {
+    error.value = 'Выберите сводную таблицу в формате XLSX.'
+    return
+  }
+  xlsxFile.value = file
+  error.value = ''
+}
+
 function onDocxDrop(event) {
   docxDragActive.value = false
   const file = Array.from(event.dataTransfer?.files ?? []).find(entry => /\.docx$/i.test(entry.name))
@@ -128,8 +142,8 @@ function validate() {
   return found
 }
 
-function download(kind) {
-  window.location.assign(`/kac/api/jobs/${result.value.id}/${kind}`)
+function download(kind, id = result.value.id) {
+  window.location.assign(`/kac/api/jobs/${id}/${kind}`)
 }
 
 function openPdf() {
@@ -137,6 +151,7 @@ function openPdf() {
 }
 
 function notifyDone() {
+  const { id, has_xlsx } = result.value
   toast.add({
     title: 'КАЦ собран',
     description: `Разделов: ${result.value.sections} · страниц КП: ${result.value.pages}`,
@@ -144,8 +159,10 @@ function notifyDone() {
     icon: 'i-lucide-circle-check',
     duration: 15000,
     actions: [
-      { label: 'Скачать PDF', icon: 'i-lucide-download', onClick: () => download('pdf') },
-      { label: 'Скачать ZIP', icon: 'i-lucide-download', onClick: () => download('zip') }
+      { label: 'Скачать PDF', icon: 'i-lucide-download', onClick: () => download('pdf', id) },
+      ...(has_xlsx ? [
+        { label: 'Скачать XLSX', icon: 'i-lucide-download', onClick: () => download('xlsx', id) }
+      ] : [])
     ]
   })
 }
@@ -158,6 +175,7 @@ async function submit() {
   try {
     result.value = await run({
       docx: sourceDocx.value,
+      xlsx: xlsxFile.value,
       offers: analysis.value.sections.flatMap(node => node.files)
     })
     phase.value = 'done'
@@ -221,8 +239,8 @@ onMounted(async () => {
           class="mt-7 rounded-2xl border border-default bg-default p-5 sm:p-7"
           @submit.prevent="submit"
         >
-          <div class="grid gap-7 lg:grid-cols-2 lg:divide-x lg:divide-default">
-            <section class="lg:pr-7">
+          <div class="grid gap-7 lg:grid-cols-2">
+            <section>
               <h2 class="flex items-center gap-3 text-xl font-semibold text-highlighted">
                 <span class="flex size-8 shrink-0 items-center justify-center rounded-full bg-elevated text-sm font-semibold ring-1 ring-default">1</span>
                 Основной документ
@@ -268,9 +286,50 @@ onMounted(async () => {
               </p>
             </section>
 
-            <section class="lg:pl-7">
+            <section>
               <h2 class="flex items-center gap-3 text-xl font-semibold text-highlighted">
                 <span class="flex size-8 shrink-0 items-center justify-center rounded-full bg-elevated text-sm font-semibold ring-1 ring-default">2</span>
+                Сводная таблица результатов
+              </h2>
+              <p v-if="!xlsxFile" class="ml-11 mt-1 text-sm text-muted">Загрузите книгу XLSX, если она входит в комплект</p>
+              <div v-if="xlsxFile" class="mt-5 flex min-h-28 items-center justify-between gap-4 rounded-xl border border-default px-5 py-4">
+                <div class="flex min-w-0 items-center gap-4">
+                  <span class="flex size-14 shrink-0 items-center justify-center rounded-xl border border-green-200 bg-green-50">
+                    <UIcon name="vscode-icons:file-type-excel" class="size-9" />
+                  </span>
+                  <div class="min-w-0">
+                    <p class="truncate font-medium text-highlighted" :title="xlsxFile.name">{{ xlsxFile.name }}</p>
+                    <p class="mt-2 flex items-center gap-2 text-sm font-medium">
+                      <UIcon name="i-lucide-circle-check" class="size-5 text-success" />
+                      Загружен
+                    </p>
+                  </div>
+                </div>
+                <UButton type="button" color="neutral" variant="ghost" icon="i-lucide-x" aria-label="Удалить сводную таблицу" @click="xlsxFile = undefined" />
+              </div>
+              <div v-else
+                class="mt-5 flex min-h-64 items-center justify-center rounded-xl border-2 border-dashed px-6 py-8 transition-colors"
+                :class="xlsxDragActive ? 'border-primary bg-primary/5' : 'border-default hover:border-accented hover:bg-zinc-50'"
+                @dragenter.prevent="xlsxDragActive = true"
+                @dragover.prevent="xlsxDragActive = true"
+                @dragleave.prevent="xlsxDragActive = false"
+                @drop.prevent="xlsxDragActive = false; selectXlsx($event.dataTransfer.files)"
+              >
+                <div class="grid justify-items-center text-center">
+                  <span class="flex size-14 items-center justify-center rounded-xl border border-green-200 bg-green-50">
+                    <UIcon name="vscode-icons:file-type-excel" class="size-9" />
+                  </span>
+                  <p class="mt-4 text-xl font-semibold text-highlighted">Перетащите XLSX сюда</p>
+                  <UButton type="button" color="neutral" variant="outline" icon="i-lucide-file-spreadsheet" label="Выбрать файл" class="mt-4" @click="xlsxInput?.click()" />
+                  <p class="mt-4 text-sm text-muted">XLSX · альбомные страницы A3</p>
+                </div>
+                <input ref="xlsxInput" type="file" accept=".xlsx" class="sr-only" @change="selectXlsx($event.target.files); $event.target.value = ''">
+              </div>
+            </section>
+
+            <section class="border-t border-default pt-7 lg:col-span-2">
+              <h2 class="flex items-center gap-3 text-xl font-semibold text-highlighted">
+                <span class="flex size-8 shrink-0 items-center justify-center rounded-full bg-elevated text-sm font-semibold ring-1 ring-default">3</span>
                 Коммерческие предложения
               </h2>
               <p v-if="!hasSelection" class="ml-11 mt-1 text-sm text-muted">Добавьте общую папку или папки разделов</p>
@@ -441,15 +500,15 @@ onMounted(async () => {
               <UButton size="sm" icon="i-lucide-download" label="Скачать" @click="download('pdf')" />
             </div>
           </li>
-          <li class="flex flex-wrap items-center gap-3 p-3">
-            <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-elevated text-toned ring-1 ring-default">
-              <UIcon name="i-lucide-file-archive" class="size-4" />
+          <li v-if="result.has_xlsx" class="flex flex-wrap items-center gap-3 p-3">
+            <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-elevated ring-1 ring-default">
+              <UIcon name="vscode-icons:file-type-excel" class="size-5" />
             </span>
             <div class="min-w-0 flex-1">
-              <p class="truncate text-sm font-medium text-highlighted">КАЦ — картинки по разделам.zip</p>
-              <p class="text-xs text-muted">ZIP · готов к скачиванию</p>
+              <p class="truncate text-sm font-medium text-highlighted">КАЦ — сводная таблица.xlsx</p>
+              <p class="text-xs text-muted">XLSX · готов к скачиванию</p>
             </div>
-            <UButton size="sm" icon="i-lucide-download" label="Скачать" @click="download('zip')" />
+            <UButton size="sm" icon="i-lucide-download" label="Скачать" @click="download('xlsx')" />
           </li>
         </ul>
 
@@ -459,7 +518,7 @@ onMounted(async () => {
         </div>
       </section>
 
-      <UModal v-model:open="structureOpen" title="Как собрать КАЦ" description="Подготовьте документы в два шага" :ui="{ content: 'sm:max-w-3xl' }">
+      <UModal v-model:open="structureOpen" title="Как собрать КАЦ" description="Подготовьте документы и папки с КП" :ui="{ content: 'sm:max-w-3xl' }">
         <template #body>
           <div class="grid gap-3">
             <div class="flex items-center gap-4 rounded-xl border border-default p-4">
@@ -469,6 +528,11 @@ onMounted(async () => {
             </div>
             <div class="flex items-center gap-4 rounded-xl border border-default p-4">
               <span class="flex size-8 shrink-0 items-center justify-center rounded-full ring-1 ring-default">2</span>
+              <span class="flex size-12 shrink-0 items-center justify-center rounded-xl border border-default"><UIcon name="i-lucide-file-spreadsheet" class="size-6" /></span>
+              <div><h3 class="font-semibold text-highlighted">Добавьте сводную таблицу, если она нужна</h3><p class="text-sm text-muted">Загрузите XLSX. В DOCX после заголовка сводной таблицы должен быть пустой абзац с разрывом раздела. Книга подготавливается к печати и вставляется в этот раздел альбомными страницами A3.</p></div>
+            </div>
+            <div class="flex items-center gap-4 rounded-xl border border-default p-4">
+              <span class="flex size-8 shrink-0 items-center justify-center rounded-full ring-1 ring-default">3</span>
               <span class="flex size-12 shrink-0 items-center justify-center rounded-xl border border-default"><UIcon name="i-lucide-folder-open" class="size-6" /></span>
               <div><h3 class="font-semibold text-highlighted">Добавьте коммерческие предложения</h3><p class="text-sm text-muted">Выберите общую папку или несколько папок разделов с PDF-файлами.</p></div>
             </div>
@@ -476,17 +540,19 @@ onMounted(async () => {
           <h3 class="mt-6 text-lg font-semibold text-highlighted">Требуемая структура папок</h3>
           <pre class="overflow-x-auto rounded-lg bg-elevated p-3 text-xs leading-relaxed text-default">Проект/
 ├─ Основной документ.docx
+├─ Сводная таблица.xlsx
 ├─ Раздел 1 - Контактная сеть/
 │  ├─ КП 1.1 Транском.pdf
 │  └─ КП 1.2 Арксеть.pdf
 └─ Раздел 2 - Наружное освещение/
-   └─ КП 1.1 ЭТМ.pdf</pre>
+   └─ КП 2.1 ЭТМ.pdf</pre>
           <ul class="mt-4 list-disc space-y-1 pl-5 text-sm text-muted">
             <li>Папка раздела называется «Раздел N - Название».</li>
             <li>PDF лежат прямо в папке раздела; подпапки «арх» и «Картинки» не учитываются.</li>
             <li>Имя файла начинается с номера КП: «КП 1.1 …». Номера в разделе не повторяются.</li>
             <li>Разделы без PDF пропускаются и перечисляются отдельно.</li>
           </ul>
+          <p class="mt-4 text-sm text-muted">После сборки можно скачать готовый PDF. Если добавили сводную таблицу, также будет доступен подготовленный XLSX.</p>
         </template>
       </UModal>
 

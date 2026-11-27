@@ -65,3 +65,13 @@ class UploadTest(unittest.TestCase):
             self.assertEqual(self.chunk(i, 0, 1, "offer", name, b"p").status_code, 200)
         self.assertEqual(len(list(self.folder.rglob("*.pdf"))), 501)
         self.assertEqual(self.client.post(self.url + "/finish").status_code, 202)
+
+    def test_xlsx_uses_the_same_retryable_upload(self):
+        self.start(3)
+        self.assertEqual(self.chunk(0, 0, 3, "docx", "смета.docx", b"doc").status_code, 200)
+        for offset, data in [(0, b"ab"), (0, b"ab"), (2, b"cd")]:
+            self.assertEqual(self.chunk(1, offset, 4, "xlsx", "сводная.xlsx", data).status_code, 200)
+        self.assertEqual((self.folder / "summary.xlsx").read_bytes(), b"abcd")
+        self.assertEqual(self.chunk(2, 0, 1, "xlsx", "другая.xlsx", b"x").status_code, 400)
+        self.assertEqual(self.chunk(2, 0, 1, "offer", "Раздел 1 - Сеть/КП 1.1.pdf", b"p").status_code, 200)
+        self.assertEqual(self.client.post(self.url + "/finish").status_code, 202)
